@@ -116,7 +116,7 @@ function onUpdateEnd(){
       console.log(`📦 Appending queued chunk (${chunk.length} bytes, ${queue.length} remaining)`);
        sourceBuffer.appendBuffer(chunk);
       }catch (e) {
-      console.error("❌ appendBuffer failed:", e);
+      console.error("❌ appendBuffer failed: ", e);
       queue = []; // Clear queue on error
     }
   }
