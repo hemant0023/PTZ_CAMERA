@@ -309,6 +309,7 @@ let RECORDING_STATE = {
   active: false,
   paused: false,
   filename: null,
+  FINAL_FINAL_NAME : null,
   folder_name: null,
   FINAL_FILE_PATH: null,
   REC_START_TIME: null,
@@ -423,9 +424,9 @@ async function findCameraPortPath2() {
      console.error("USB DEVICE LIST",usbDevices);
     for (let i = 0; i < usbDevices.length; i++) {
       const dev = usbDevices[i];
-      console.error("DEVICE CHECK",dev);
+     // console.error("DEVICE CHECK",dev);
       if (!dev.includes("-")) continue; // skip root hubs
-       console.error("correct DEVICE CHECK",dev);
+      // console.error("correct DEVICE CHECK",dev);
       
        const base = `/sys/bus/usb/devices/${dev}`;
       const vendorFile = path.join(base, "idVendor");
@@ -440,11 +441,11 @@ async function findCameraPortPath2() {
 
       // 🎯 Target camera
       if (vendor === "2e7e" && product === "0877"){
-       console.error("DEVICE base CHECK",base);
+       //console.error("DEVICE base CHECK",base);
         const entries = fs.readdirSync(base);
 
         for (const entry of entries) {
-          console.error("DEVICE entries CHECK",entries);
+         // console.error("DEVICE entries CHECK",entries);
           const videoPath = path.join(base, entry, "video4linux");
          console.error("DEVICE videoPath CHECK",videoPath);
           if (fs.existsSync(videoPath)){
@@ -1720,7 +1721,12 @@ FFMPEG_ERROR.reason = "------";
   if(WESOCKET_CONNECTED_FLAG && liveClients.size == 0 && deadClients.length >= 1 ){
          console.log("NO CLIENT AVAILABLE IN WEBSOCKET CLEARING WEBSOCKET ");
          deadClients = [];
-       //  ws.close();
+          for (const ws of liveClients){
+         console.log("wss CLOSING WS CLIENT IN RESET ...",liveClients.length);
+       if (ws.readyState === ws.OPEN) {
+          ws.close(1000, "STOP EVENT RESET"); // SERVER ERROR
+       }
+      }
 
       }    
 });
@@ -1885,10 +1891,22 @@ app.post("/start", async (req, res) => {
       return res.status(400).json({ error: "SD_CARD_NOT_DETECTED" });
     }
 
-    const videoDev = await detectUsbCameraAsync();
-    if (!videoDev) {
-      return res.status(400).json({ error: "HD_CAMERA_NOT_DETECTED" });
-    }
+    const videoDev = await findCameraPortPath2();
+   if (!videoDev || !videoDev.videoNode){
+     console.log(" CAMERA_USB_ERROR_RESET:", videoDev);
+     return res.status(400).json({ error: "CAMERA_USB_ERROR_RESET" });
+   }
+
+  console.log("BEFORE CAMERA_CONFIGURATION:", CAMERA_CONFIGURATION);
+  console.log("✅ Camera detected:", videoDev);
+  CAMERA_CONFIGURATION.DEVICE_NODE = videoDev.videoNode;
+  console.log(" FINAL CAMERA_CONFIGURATION:", CAMERA_CONFIGURATION);
+
+
+    // const videoDev = await detectUsbCameraAsync();
+    // if (!videoDev) {
+    //   return res.status(400).json({ error: "HD_CAMERA_NOT_DETECTED" });
+    // }
 
     // 🔑 CHECK DEVICE READINESS
     // const isReady = await waitForCameraReady();
@@ -1935,17 +1953,7 @@ app.post("/start", async (req, res) => {
     }else{
       await new Promise(r => setTimeout(r, 1000));}
 
-  const usb_device_details = await findCameraPortPath2();
-   if (!usb_device_details || !usb_device_details.videoNode){
-      RECORDING_STATE.active = false;
-      WESOCKET_SEND_DATA_CONNECTED_FLAG = true;
-     console.log(" CAMERA_USB_ERROR_RESET:", usb_device_details);
-     return res.status(400).json({ error: "CAMERA_USB_ERROR_RESET" });
-   }
-  console.log(" CAMERA_CONFIGURATION:", CAMERA_CONFIGURATION);
-  console.log("✅ Camera detected:", usb_device_details);
-  //CAMERA_CONFIGURATION.DEVICE_NODE = usb_device_details.videoNode.toString;
-  console.log(" FINAL CAMERA_CONFIGURATION:", CAMERA_CONFIGURATION);
+
 
  if (ffmpegProcess == null && ffmpegStopping == false ){
       
@@ -1956,12 +1964,7 @@ app.post("/start", async (req, res) => {
 
 
 
-    const outputPath = getUniqueFilePath(
-      videosDir,
-      FILE_NAME_TEMP,
-      CAMERA_CONFIGURATION.EXTENSION
-    );
-
+    const outputPath = getUniqueFilePath(videosDir,FILE_NAME_TEMP,CAMERA_CONFIGURATION.EXTENSION );
     const segmentPath = getNextSegmentPath(FILE_NAME_TEMP);
     console.log("FIRST segment path:", segmentPath);
     // ▶ Start FFmpeg
@@ -1985,7 +1988,8 @@ app.post("/start", async (req, res) => {
     RECORDING_STATE.curr_segment = segmentPath;
     RECORDING_STATE.segments.push(segmentPath);
     RECORDING_STATE.status = "RECORDING";
-    RECORDING_STATE.filename = FILE_NAME_TEMP;
+    RECORDING_STATE.filename = FILE_NAME_TEMP; 
+    RECORDING_STATE.FINAL_FINAL_NAME = path.basename(outputPath);
     RECORDING_STATE.folder_name =  GET_DATE_FORMATED();
     RECORDING_STATE.FINAL_FILE_PATH =  outputPath;//.replace(/\.mkv$/i, ".mp4");;
     RECORDING_STATE.active = true;
@@ -2010,9 +2014,9 @@ app.post("/start", async (req, res) => {
     
      return res.json({
       success: true,
-      filename:   RECORDING_STATE.filename+CAMERA_CONFIGURATION.EXTENSION,
+      filename:   RECORDING_STATE.FINAL_FINAL_NAME,
       foldername : RECORDING_STATE.folder_name,
-      url:       path.join( "videos",RECORDING_STATE.folder_name,(RECORDING_STATE.filename+CAMERA_CONFIGURATION.EXTENSION)), //RECORDING_STATE.FINAL_FILE_PATH,
+      url:       path.join( "videos",RECORDING_STATE.folder_name, RECORDING_STATE.FINAL_FINAL_NAME), //RECORDING_STATE.FINAL_FILE_PATH,
       state: RECORDING_STATE.status,
       RECORDING_STATE :RECORDING_STATE,
       CAM_CONFIG : null
@@ -2022,6 +2026,7 @@ app.post("/start", async (req, res) => {
     
    
   }else{    
+
     console.log("/start request CAMERA_ALREADY_RUNNING 2ffmpegStopping: ",ffmpegStopping);
     return res.status(500).json({ error: "CAMERA_ALREADY_RUNNING" });
 
@@ -2048,6 +2053,7 @@ app.post("/pause", async (req, res) => {
   console.log("⏸ PAUSE request received");
 
   if (!RECORDING_STATE.active || RECORDING_STATE.paused) {
+     console.log("PAUSE invalid state no recording or already pause rec state: ",RECORDING_STATE.active );
     return res.status(400).json({ error: "INVALID_STATE" });
   }
 
@@ -2058,29 +2064,24 @@ app.post("/pause", async (req, res) => {
     RECORDING_STATE.status = "PAUSED";
 
       if (ffmpegProcess && ffmpegStopping == false ) {
-
           killFFmpeg("pause request recieve stop FFmpeg...");
-          //ffmpegProcess.kill("SIGINT");
-          // await new Promise(resolve =>
-         //   ffmpegProcess.once("close", resolve));
-      
           console.log("⏸ RECORDING PAUSED at", RECORDING_STATE.pausedAt);
 
-      res.json({   success: true,
-      filename:   ( RECORDING_STATE.filename+ CAMERA_CONFIGURATION.EXTENSION),
+      return res.json({
+      success: true,
+      filename:   RECORDING_STATE.FINAL_FINAL_NAME,
       foldername : RECORDING_STATE.folder_name,
-      url:       path.join( "videos",RECORDING_STATE.folder_name,(RECORDING_STATE.filename + CAMERA_CONFIGURATION.EXTENSION)), //RECORDING_STATE.FINAL_FILE_PATH,
+      url:       path.join( "videos",RECORDING_STATE.folder_name, RECORDING_STATE.FINAL_FINAL_NAME), //RECORDING_STATE.FINAL_FILE_PATH,
       state: RECORDING_STATE.status,
-      RECORDING_STATE :RECORDING_STATE,});
+      RECORDING_STATE :RECORDING_STATE,
+      CAM_CONFIG : null
+    });
 
         }else{ 
            console.error("PAUSE ffmpegProcess EEROR :");
            res.status(500).json({ error: "PAUSE_FAILED" });
           }
 
-    
-
-   
   } catch (err) {
     console.error("PAUSE_FAILED:", err);
     res.status(500).json({ error: "PAUSE_FAILED" });
@@ -2094,14 +2095,14 @@ app.post("/resume", (req, res) => {
 
     console.log("▶ RESUMED request RECIEVE");
     if (!RECORDING_STATE.active || !RECORDING_STATE.paused){
-      console.log("▶RESUMED INVALID_STATE");
+      console.log("▶RESUMED INVALID_STATE REC NOT ACTIVE",RECORDING_STATE.active);
     return res.status(400).json({ error: "INVALID_STATE" });
       }
 
   try{
   
 
-    const baseName = RECORDING_STATE.filename ; 
+    const baseName = RECORDING_STATE.filename; 
     console.log("RESUME baseName NAME ",baseName);
     const segmentPath = getNextSegmentPath(baseName);
     console.error("RESUME NEW SEGMENT NAME ",segmentPath);
@@ -2138,11 +2139,12 @@ app.post("/resume", (req, res) => {
         reason: FFMPEG_ERROR.reason
       });
     }else{
-    return res.json({
+
+        return res.json({
       success: true,
-      filename:   ( RECORDING_STATE.filename + CAMERA_CONFIGURATION.EXTENSION),
+      filename:   RECORDING_STATE.FINAL_FINAL_NAME,
       foldername : RECORDING_STATE.folder_name,
-      url:       path.join( "videos",RECORDING_STATE.folder_name,(RECORDING_STATE.filename+ CAMERA_CONFIGURATION.EXTENSION)), //RECORDING_STATE.FINAL_FILE_PATH,
+      url:       path.join( "videos",RECORDING_STATE.folder_name, RECORDING_STATE.FINAL_FINAL_NAME), //RECORDING_STATE.FINAL_FILE_PATH,
       state: RECORDING_STATE.status,
       RECORDING_STATE :RECORDING_STATE,
       CAM_CONFIG : null
@@ -2416,12 +2418,13 @@ app.post("/stop", async (req, res) => {
     console.log("🏁 RECORDING COMPLETED");
 
     res.json({
-        success: true,
-         filename:   ( RECORDING_STATE.filename + CAMERA_CONFIGURATION.EXTENSION),
+         success: true,
+      filename:   RECORDING_STATE.FINAL_FINAL_NAME,
       foldername : RECORDING_STATE.folder_name,
-       url:       path.join( "videos",RECORDING_STATE.folder_name,(RECORDING_STATE.filename+ CAMERA_CONFIGURATION.EXTENSION)), //RECORDING_STATE.FINAL_FILE_PATH,
-        state:     RECORDING_STATE.status,
-        RECORDING_STATE : RECORDING_STATE
+      url:       path.join( "videos",RECORDING_STATE.folder_name, RECORDING_STATE.FINAL_FINAL_NAME), //RECORDING_STATE.FINAL_FILE_PATH,
+      state: RECORDING_STATE.status,
+      RECORDING_STATE :RECORDING_STATE,
+      CAM_CONFIG : null
         });
 
         RECORDING_STATE.filename = null;
@@ -2429,14 +2432,30 @@ app.post("/stop", async (req, res) => {
         RECORDING_STATE.REC_START_TIME = null;
         RECORDING_STATE.REC_STOP_TIME = null;
         RECORDING_STATE.REC_VIDEO_DURATION  = null;
-    
-
+        RECORDING_STATE.FINAL_FINAL_NAME = null;
+  
     // Restart live stream if needed
     if (WESOCKET_CONNECTED_FLAG && LIVE_STREAM_ENABLED && liveClients.size >= 1) {
         console.log("🎥 Restarting live stream...");
         ALLOWED_LIVE_FLAG = true;
-         notifyLiveClientsReset();
+        // notifyLiveClientsReset();
+    
+        for (const ws of liveClients) {
+       if (ws.readyState === ws.OPEN) {
+          ws.close(1000, "STOP EVENT"); // SERVER ERROR
+       }
       }
+    
+        // ws.close(1000, "Done");
+
+  //   setTimeout(() => {
+  //   if (ws.readyState !== ws.CLOSED) {
+  //   console.warn("⚠️ Forcing WS termination");
+  //   ws.terminate(); // HARD close (TCP RST)
+  //  }
+  //  }, 3000);
+      
+  }
 
   } catch (err) {
 
@@ -2458,6 +2477,7 @@ app.post("/stop", async (req, res) => {
     }
 
     // Reset state
+     RECORDING_STATE.FINAL_FINAL_NAME = null;
     RECORDING_STATE.curr_segment = null;
     RECORDING_STATE.status = "IDLE";
     RECORDING_STATE.active = false;
@@ -2479,7 +2499,13 @@ app.post("/stop", async (req, res) => {
       console.log("🎥 Restarting live stream after error...");
       ALLOWED_LIVE_FLAG = true;
       mp4Header = null;
-      notifyLiveClientsReset();
+      for (const ws of liveClients) {
+           console.log("wss CLOSING WS CLIENT IN STOP ERROR ...",liveClients.length);
+       if (ws.readyState === ws.OPEN) {
+          ws.close(1000, "STOP ERROR EVENT"); // SERVER ERROR
+       }
+      }
+     // notifyLiveClientsReset();
     }
 
     res.status(500).json({
@@ -2498,6 +2524,13 @@ app.post("/reset", async (req, res) => {
       console.log("\n🗑️ reset REQUEST RECIEVE...");
    
  try {
+
+  for (const ws of liveClients){
+      console.log("wss CLOSING WS CLIENT IN RESET ...",liveClients.length);
+       if (ws.readyState === ws.OPEN) {
+          ws.close(1000, "STOP EVENT RESET"); // SERVER ERROR
+       }
+      }
 
    if (ffmpegProcess  && ffmpegStopping == false){
          stopFFmpeg("⛔PAUSE STOP RECORDING");
@@ -2520,6 +2553,7 @@ app.post("/reset", async (req, res) => {
 
 
      // Reset state
+      RECORDING_STATE.FINAL_FINAL_NAME = null;
     RECORDING_STATE.curr_segment = null;
     RECORDING_STATE.status = "IDLE";
     RECORDING_STATE.active = false;
@@ -2677,6 +2711,17 @@ if ( ALLOWED_LIVE_FLAG && !ffmpegProcess ){
     //   }));
     //   return;
     // }
+       const videoDev = await findCameraPortPath2();
+       if (!videoDev || !videoDev.videoNode){
+       console.log(" CAMERA_USB_ERROR_RESET:", videoDev);
+       ws.send(JSON.stringify({ type: "ERROR", message: "USB_CAMERA_ERROR" }));
+       return;
+      }
+
+  console.log("LIVE BEFORE CAMERA_CONFIGURATION:", CAMERA_CONFIGURATION);
+  console.log("✅ LIVE Camera detected:", videoDev);
+  CAMERA_CONFIGURATION.DEVICE_NODE = videoDev.videoNode;
+  console.log("LIVE FINAL CAMERA_CONFIGURATION:", CAMERA_CONFIGURATION);
       
   await new Promise(r => setTimeout(r, 500));
     
@@ -2728,6 +2773,7 @@ if ( ALLOWED_LIVE_FLAG && !ffmpegProcess ){
  ws.on("error", err => {
     console.error("WebSocket error:", err);
     liveClients.delete(ws);
+    ws.terminate();
   });
 
 });
