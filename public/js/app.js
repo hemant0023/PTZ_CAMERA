@@ -76,11 +76,11 @@ async function restoreRecordingState() {
     const res = await fetch("/api/recording/status");
     const data = await res.json();
     
-     
+    
     if (!data.active){
       state = "IDLE";
       updateUI();
-       startWSStream();
+       //startWSStream();
       return;
     }
 
@@ -100,12 +100,14 @@ async function restoreRecordingState() {
 
 
 const liveFeed = document.getElementById("liveFeed");
+
 let ws = null;
 let mediaSource = null;
 let sourceBuffer = null;
 let queue = [];
 let isFirstChunk = true;
 let headerReceived = false; // 🔑 RESET FLAG
+let first_moov_headerReceived = false; 
 let bufferCleanupInterval;
 let isMediaSourceReady = false; // 🔑 NEW: Track ready state
 function onUpdateEnd(){
@@ -113,7 +115,7 @@ function onUpdateEnd(){
   if (sourceBuffer && !sourceBuffer.updating && queue.length > 0) {
     try {
        const chunk = queue.shift();
-      console.log(`📦 Appending queued chunk (${chunk.length} bytes, ${queue.length} remaining)`);
+      console.log(`📦 onUpdateEnd event Appending queued chunk (${chunk.length} bytes, ${queue.length} remaining)`);
        sourceBuffer.appendBuffer(chunk);
       }catch (e) {
       console.error("❌ appendBuffer failed: ", e);
@@ -166,9 +168,11 @@ function onUpdateEnd(){
 function resetMSE() {
 
   console.log("🔄 RESETTING MEDIA SOURCE");
-   stopBufferCleanup(); // 🔑 Stop cleanup
-
-  isMediaSourceReady = false; // 🔑 MARK AS NOT READY
+    isMediaSourceReady = false; 
+    stopBufferCleanup(); // 🔑 Stop cleanup
+    headerReceived = false; // 🔑 RESET FLAG
+    first_moov_headerReceived = false; 
+   // 🔑 MARK AS NOT READY
 
   // Clean up SourceBuffer
   if (sourceBuffer) {
@@ -222,9 +226,29 @@ function stopBufferCleanup() {
     console.log("🛑 Buffer cleanup stopped");
   }
 }
+function forceCleanup() {
 
+  if (!sourceBuffer || sourceBuffer.updating) return;
+
+  try {
+    const buffered = sourceBuffer.buffered;
+    if (!buffered.length) return;
+
+    const current = liveFeed.currentTime;
+    const KEEP = 5; // seconds to keep behind
+
+    const removeEnd = current - KEEP;
+    if (removeEnd > buffered.start(0)) {
+      sourceBuffer.remove(buffered.start(0), removeEnd);
+      console.log("🧹 Forced buffer cleanup to", removeEnd.toFixed(2));
+    }
+  } catch (e) {
+    console.warn("Cleanup failed:", e.message);
+  }
+}
 
 function startBufferCleanup() {
+
   stopBufferCleanup(); // Clear any existing interval
   
   bufferCleanupInterval = setInterval(() => {
@@ -266,10 +290,40 @@ function startBufferCleanup() {
 }
 
 async function RESTART_MSE() {
+    
+    liveFeed.load();
 
     console.log("🎬 Initializing MediaSource...");
      mediaSource = new MediaSource();
+
      liveFeed.src = URL.createObjectURL(mediaSource);
+   
+     //  liveFeed.load();
+       liveFeed.autoplay = true;
+      liveFeed.muted = true;       // required by Chrome 
+      liveFeed.playsInline = true; //Disable fullscreen hijack  
+      liveFeed.controls = false;  // Hides native play/pause UI Prevents user from scrubbing timeline
+
+
+       document.addEventListener("volume_button_click", () => {
+       liveFeed.muted = false;  //Can I unmute later
+     });
+
+     liveFeed.addEventListener("playing", () => {
+     console.log("▶️ Video playing event ");
+   });
+
+     liveFeed.addEventListener("pause", () => {
+     console.log("⏸️ Video paused event"); 
+    });
+
+   liveFeed.addEventListener("waiting", () => {
+  console.log("⏳ Buffering event");
+  });
+
+  liveFeed.addEventListener("error", (e) => {
+  console.error("🎥 Video error event", liveFeed.error);
+});
 
      mediaSource.addEventListener("sourceopen", () => {
     
@@ -284,7 +338,7 @@ async function RESTART_MSE() {
 
   sourceBuffer = mediaSource.addSourceBuffer('video/mp4; codecs="avc1.64002A "');
   sourceBuffer.mode = "segments";
-      console.log("✅ SourceBuffer created");
+  console.log("✅ SourceBuffer created");
     
     //codecs="avc1.42E01E  // // H.264 baseline profile (works everywhere)
       // Higher quality, less compatible:
@@ -295,50 +349,54 @@ async function RESTART_MSE() {
     
       
       sourceBuffer.addEventListener("updateend", onUpdateEnd);
-     console.log("✅ SourceBuffer created successfully");
+      console.log("✅ SourceBuffer created successfully");
+      
+      isMediaSourceReady = true;
+      console.log("✅ MediaSource READY FOR DATA");
+     
+      startBufferCleanup();  isMediaSourceReady = true;
 
-      sourceBuffer.addEventListener("error", (e) => {
-        console.error("❌ SourceBuffer ERROR:", e);
+        sourceBuffer.addEventListener("error", (e) =>{
+        console.error("❌ SOURCE BUFFER ERROR EVENT START :", e);
         resetMSE(); // 🔑 CRITICAL
         queue = [];
-        headerReceived = false;
-        setTimeout(() => RESTART_MSE(), 100);
-          ws.send(JSON.stringify({ type: "STREAM_HEADER", message: "SEND HEADER"})); 
-        
+        setTimeout(() => RESTART_MSE(), 10);
+       ws.send(JSON.stringify({ type: "STREAM_HEADER", message: "SEND HEADER"})); 
       });
 
-       isMediaSourceReady = true;
-      console.log("✅ MediaSource READY FOR DATA");
-
-      // Start buffer cleanup
-      startBufferCleanup();
-
+       
        // 🔑 Process queued chunks with a small delay
       if (queue.length > 0) {
-        console.log(`📦 Processing ${queue.length} queued chunks...`);
-        
+        console.log(`📦 Processing PREVIOUS RESTART  ${queue.length} queued chunks...`);
         setTimeout(() => {
           if (isMediaSourceReady && sourceBuffer && !sourceBuffer.updating && queue.length > 0) {
             try {
               const chunk = queue.shift();
-              console.log(`📦 Appending first queued chunk (${chunk.length} bytes)`);
+              console.log(`📦 Process queued chunks with a small delay Appending first queued chunk (${chunk.length} bytes)`);
               sourceBuffer.appendBuffer(chunk);
             } catch (e) {
               console.error("❌ Failed to append first queued chunk:", e);
             }
           }
-        }, 100); // Small delay to ensure everything is stable
+        }, 10); // Small delay to ensure everything is stable
       }
+
    } catch (err) {
       console.error("❌ Failed to create SourceBuffer:", err);
       if (err.name === 'NotSupportedError') {   
         console.log("⚠️ Trying alternative codec...");
         try {
-          sourceBuffer = mediaSource.addSourceBuffer('video/mp4; codecs="avc1.640028"');
+          sourceBuffer = mediaSource.addSourceBuffer('video/mp4; codecs="avc1.42E01E"');
+           sourceBuffer.mode = "segments";
           console.log("✅ SourceBuffer created with alternative codec");
-          
+         
+  
           sourceBuffer.addEventListener('updateend', onUpdateEnd);
           sourceBuffer.addEventListener('error', (e) => console.error("❌ SourceBuffer error:", e));
+          isMediaSourceReady = true;
+          console.log("✅ MediaSource READY FOR DATA");
+         //ws.send(JSON.stringify({ type: "STREAM_HEADER", message: "SEND HEADER"})); 
+         startBufferCleanup();  isMediaSourceReady = true;
 
         } catch (err2) {
           console.error("❌ Alternative codec also failed:", err2);
@@ -346,6 +404,8 @@ async function RESTART_MSE() {
       }else{   //stopWSStream(); 
          }
     }
+
+
 
   });
 
@@ -400,14 +460,414 @@ function isValidMP4Data(data) {
   );
   
   if (!isValid) {
-    console.warn("⚠️ Invalid MP4 box type:", 
-      String.fromCharCode(boxType[0], boxType[1], boxType[2], boxType[3]));
+    console.warn("⚠️ Invalid MP4 box type:", String.fromCharCode(boxType[0], boxType[1], boxType[2], boxType[3]));
+
+  }else{  
+    console.warn("valid MP4 box type:", String.fromCharCode(boxType[0], boxType[1], boxType[2], boxType[3]));
+
   }
   
   return isValid;
 }
 
 
+function stopWSStream() {
+
+    isMediaSourceReady = false; // 🔑 Mark as not ready
+     if (ws){
+    ws.close();
+    ws = null;
+  }
+
+   stopBufferCleanup(); // 🔑 Stop cleanup
+   resetMSE();
+  queue = [];
+ mediaSource = null;
+  sourceBuffer = null;
+   liveFeed.load(); // Reset video element
+   liveFeed.src = "";
+ 
+  
+}
+let allowAppend = true;
+
+function canAppend() {
+
+  if (!sourceBuffer || !sourceBuffer.buffered.length) return true;
+
+  const buffered = sourceBuffer.buffered;
+  const start = buffered.start(0);
+  const end = buffered.end(buffered.length - 1);
+
+  const MAX_BUFFER = 15; // seconds (live safe)
+
+  return (end - start) < MAX_BUFFER;
+}
+
+  // if (!allowAppend){
+  //     console.warn("🚫 allowAppendappend",allowAppend);
+  //      return; } 
+
+  //  if (!canAppend()) {
+  //    console.warn("🚫 Buffer full → skipping append",sourceBuffer.buffered.length);
+  //   return;
+  //    }
+
+//console.warn("🔁 chunk RECEIVED",chunk);
+
+
+// if (!allowAppend){
+//        console.warn("🚫 allowAppendappend",allowAppend);
+//         return; } 
+        
+
+function getBoxType(chunk) {
+  if (chunk.length < 8) return null;
+  return String.fromCharCode(
+    chunk[4],
+    chunk[5],
+    chunk[6],
+    chunk[7]
+  );
+}
+
+// readyState values:
+
+// Value	Meaning
+// 0	HAVE_NOTHING
+// 1	HAVE_METADATA
+// 2	HAVE_CURRENT_DATA
+// 3	HAVE_FUTURE_DATA
+// 4	HAVE_ENOUGH_DATA
+
+let waitingForFirstMdat = false;
+function STORE_CHUNK(chunk) {
+
+    
+
+  const boxType = getBoxType(chunk);
+
+  console.log({
+  waiting_data: liveFeed.seeking,
+  //play: liveFeed.play,
+  paused: liveFeed.paused,
+  ennded: liveFeed.ended , 
+  currentTime: liveFeed.currentTime,
+ 
+});
+console.log({
+ duration:liveFeed.duration,
+  buffered: sourceBuffer?.buffered?.length,
+  readyState: liveFeed.readyState
+});
+  console.log("📦 MP4 boxType RECEIVED, size:", boxType);
+
+      if (!headerReceived ){
+
+          if (boxType === "ftyp" ){
+          console.log("📦 MP4 HEADER boxType RECEIVED, size:", boxType);
+          console.log("📦 MP4 HEADER RECEIVED, size:", chunk.length);
+          headerReceived = true;
+          }
+          
+       }else if (!first_moov_headerReceived  && headerReceived ) {
+      
+        if (boxType === "moof") {
+        console.log("🧼 Clean fragment boundary found (moof)",boxType);
+        first_moov_headerReceived = true;
+       // waitingForFirstMdat = true;        
+         } 
+
+     
+      // }else if (waitingForFirstMdat) {
+
+      //        if (boxType === "mdat") {
+      //        console.log("✅ First playable fragment arrived (mdat)");
+      //        waitingForFirstMdat = false; }
+    
+     } else {
+       
+      if (!first_moov_headerReceived && !headerReceived  && waitingForFirstMdat ) {
+       console.log("🧼  Drop everything until moov header and  fragment boundary found (moof)",boxType);
+       return;  }
+      }
+   
+
+      if (chunk && !sourceBuffer.updating && queue.length === 0 &&  sourceBuffer){
+        
+       try {
+      //  console.log(`📦 Appending chunk directly (${chunk.length} bytes)`);
+        sourceBuffer.appendBuffer(chunk);
+      } catch (e) {
+       if (e.name === "QuotaExceededError") {
+        console.warn("🧹 Quota hit → forcing cleanup");
+        forceCleanup();
+      } else {
+        console.error("appendBuffer error:", e);
+      }
+      }
+
+      }else if(chunk && isMediaSourceReady){
+        queue.push(chunk);
+       //  console.log(`📦 Queued chunk (queue length: ${chunk.length})`);
+      }else{ 
+        console.log(` ⚠️ chunk or media buffer error chuck length: ${chunk.length})`); 
+       }
+
+
+    }
+
+let streamBuffer = new Uint8Array(0);
+function readMp4Box(buffer){
+
+  if(buffer.length < 8){
+    //console.error("readMp4Box buffer length:",buffer.length);
+    return null;
+  }
+  
+  const size =(buffer[0] << 24) | (buffer[1] << 16) | (buffer[2] << 8) | buffer[3];
+  if(size < 8 || buffer.length < size){
+    //console.error(`readMp4Box buffer length : ${buffer.length} || size: ${size}`); 
+    return null;
+  }
+  const type = String.fromCharCode(buffer[4], buffer[5], buffer[6], buffer[7]);
+  return { size, type };
+}
+
+
+function startWSStream() {
+
+ if (ws && ws.readyState === WebSocket.OPEN) {
+    console.log("⚠️ WebSocket already open");
+    return;
+  }
+    resetMSE(); // 🔑 CRITICAL
+   RESTART_MSE();
+
+  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+  const wsUrl = `${protocol}//${window.location.host}/ws`; // Adjust your WS endpoint
+
+   //   ws = new WebSocket(wsUrl);
+    ws = new WebSocket(`ws://${location.host}`);
+    ws.binaryType = "arraybuffer";
+
+    ws.onopen = () => {
+      console.log("WS CONNECTED");
+    };
+
+    ws.onmessage = event => {
+
+  
+   if (typeof event.data === "string"){
+
+        const msg = JSON.parse(event.data);
+       // console.log("RECIEVE EVENT MESSAGE",msg);
+        
+        if (msg.type === "CLEAR_STREAM"){
+            console.log("🔁 CLEAR_STREAM RECEIVED",msg.message);
+            resetMSE(); // 🔑 CRITICAL
+            setTimeout(() => RESTART_MSE(), 1000);
+            return;
+        }
+
+        if (msg.type === "RESET_STREAM" || msg.type ===  "STREAM_RESTART"){
+          console.log("🔁 RESET_STREAM || STREAM_RESTART RECEIVED :::",msg.message);
+          stopWSStream();          // close socket cleanly
+          setTimeout(startWSStream, 1000); // restart clean
+           return;
+         }
+
+          if (msg.type === "STREAM_READY") {
+             console.log("🔁 STREAM_READY RECEIVED:::",msg.message);
+            // return;
+           
+           }
+
+           if (msg.type === "ERROR") {
+              console.log("🔁 ERROR RESET_STREAM RECEIVED ::",msg.message);
+          //  stopWSStream();          // close socket cleanly
+        //  setTimeout(startWSStream, 3000); // restart clean
+         }
+
+         return;
+      }
+      
+    const chunk = new Uint8Array(event.data);
+    
+    if (chunk.length === 0) {
+      console.warn("⚠️ Received empty chunk, ignoring");
+      return;
+    }
+    
+    if (chunk.length < 8) {
+      console.warn("⚠️ Chunk too small to be valid MP4 data");
+      return;
+    }
+
+  
+         if (!isMediaSourceReady ){
+           console.warn("⚠️ MediaSource not ready yet, queuing chunk:", chunk.length);
+           queue.push(chunk);
+           return;
+          } 
+
+       if (mediaSource.readyState !== "open") {
+         console.warn("⚠️ MediaSource not open, queuing chunk",chunk.length);
+         queue.push(chunk);  
+         return;
+      }
+
+       if (!mediaSource && mediaSource.readyState !== "open"){
+           console.warn("⚠️ MediaSource is null dropping chunk",chunk.length);
+           resetMSE(); // 🔑 CRITICAL
+          setTimeout(() => RESTART_MSE(), 100);
+         return;
+      }
+
+     if (!sourceBuffer) {
+      console.warn("⚠️ SourceBuffer not created, queuing chunk:", chunk.length);
+      queue.push(chunk);
+      return;
+    }
+      
+          STORE_CHUNK(chunk);
+    
+// // 1️⃣ accumulate bytes (NEW)
+// const merged = new Uint8Array(streamBuffer.length + chunk.length);
+// merged.set(streamBuffer);
+// merged.set(chunk, streamBuffer.length);
+// streamBuffer = merged;
+
+// // 2️⃣ extract REAL MP4 boxes
+// while (true) {
+
+//   const box = readMp4Box(streamBuffer);
+//   if (!box) {
+//    // console.log("⚠️ box error dropping chunk",box); 
+//      break;}
+
+//   // 🔪 THIS is the correct slice usage
+//   const payload = streamBuffer.slice(0, box.size);
+//   streamBuffer = streamBuffer.slice(box.size);
+
+//   // 3️⃣ use YOUR existing pipeline
+//  // console.log("chunk",box); 
+//   //STORE_CHUNK(payload);
+// }
+
+      
+  //    CHUNCK_RESULT = isValidMP4Data(chunk);
+
+  //    const isHeader = chunk.length >= 4 && 
+  //                    chunk[4] === 0x66 && // 'f'
+  //                    chunk[5] === 0x74 && // 't'
+  //                    chunk[6] === 0x79 && // 'y'
+  //                    chunk[7] === 0x70;   // 'p'
+   
+
+  //     if (isHeader && !headerReceived && isValidMP4Data(chunk)){
+  //        console.log("📦 MP4 HEADER RECEIVED, size:", chunk.length);
+  //         headerReceived = true;
+  //        STORE_CHUNK(chunk);
+         
+  //        return;
+        
+  //      }else{ 
+  // //&& first_moov_headerReceived == false
+  //            if(!headerReceived  ){
+  //              console.log("📦 HEADER RECEIVED NOT RECIEVE YEY return , size:", chunk.length ,headerReceived,first_moov_headerReceived);
+  //             return;
+  //          }
+  //       }
+
+  //      if (headerReceived && CHUNCK_RESULT && !first_moov_headerReceived ) {
+  //        console.log("📦 MP4 first_moov_ RECEIVED, size:", chunk.length);
+  //        STORE_CHUNK(chunk);
+  //         first_moov_headerReceived = true;
+  //         return;
+  //      }else{
+  //        if(first_moov_headerReceived  ){
+  //       console.log("📦H MOOV RECIEVE CHUNK  size:", chunk.length);
+  //       STORE_CHUNK(chunk);
+  //     }else{  console.log("📦WAITING TO RECIEVE FIRST VAILD MOOF", chunk.length); }
+
+  //       }
+
+        // STORE_CHUNK(chunk);
+    };
+
+    ws.onerror = err => {
+      console.error("⚠️⚠️⚠️⚠️⚠️⚠️vWS ERROR", err);
+    };
+
+    ws.onclose = (event) => {
+        console.log(`🔌🙈🙈🙈 WS CLOSED (code: ${event.code}, reason: ${event.reason})`);
+         stopWSStream();
+    };
+
+  };
+
+
+  function PAUSE_PLAY(){
+
+  console.log("🙈 TAB enent → PAUSE_PLAY");
+  
+
+  
+     allowAppend = false;
+     stopBufferCleanup();  // 1️⃣ Stop buffer cleanup
+     
+     liveFeed.pause();  // 2️⃣ Pause video
+
+
+
+   try {
+
+      if (sourceBuffer && sourceBuffer.buffered.length > 0) {
+        const end = sourceBuffer.buffered.end(sourceBuffer.buffered.length - 1);
+        liveFeed.currentTime = end - 0.1; // 🔥 LIVE edge
+        }
+
+    } catch {}
+
+    allowAppend = true;
+     if (liveFeed.paused) {
+      liveFeed.play();//.catch(() => {});
+  }
+   startBufferCleanup(); // 5️⃣ Restart buffer cleanup
+  
+};
+
+document.addEventListener("visibilitychange", () => {
+  console.log("🙈 TAB HIDDEN → visibilitychange");
+  
+  if (document.hidden) {
+    console.log("🙈 TAB HIDDEN → pausing live stream");
+     allowAppend = false;
+     stopBufferCleanup();  // 1️⃣ Stop buffer cleanup
+     liveFeed.pause();  // 2️⃣ Pause video
+
+  } else {
+ 
+    console.log("👀 TAB VISIBLE → resync live");
+
+    // 3️⃣ Jump to LIVE edge
+   try {
+
+      if (sourceBuffer && sourceBuffer.buffered.length > 0) {
+        const end = sourceBuffer.buffered.end(sourceBuffer.buffered.length - 1);
+        liveFeed.currentTime = end - 0.1; // 🔥 LIVE edge
+        }
+
+    } catch {}
+
+    allowAppend = true;
+     if (liveFeed.paused) {
+      liveFeed.play();//.catch(() => {});
+  }
+   startBufferCleanup(); // 5️⃣ Restart buffer cleanup
+  }
+});
 
 // function clearOldBuffer() {
 
@@ -536,192 +996,6 @@ function isValidMP4Data(data) {
 
 
 
-function stopWSStream() {
-
-    isMediaSourceReady = false; // 🔑 Mark as not ready
-  if (ws){
-    ws.close();
-    ws = null;
-  }
-
-   stopBufferCleanup(); // 🔑 Stop cleanup
-
-   resetMSE();
-  queue = [];
- mediaSource = null;
-  sourceBuffer = null;
-   liveFeed.load(); // Reset video element
-   liveFeed.src = "";
-  headerReceived = false; // 🔑 RESET FLAG
-  
-  
-}
-
-
-function startWSStream() {
-
- if (ws && ws.readyState === WebSocket.OPEN) {
-    console.log("⚠️ WebSocket already open");
-    return;
-  }
-
-   RESTART_MSE();
-
-  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-  const wsUrl = `${protocol}//${window.location.host}/ws`; // Adjust your WS endpoint
-
-   //   ws = new WebSocket(wsUrl);
-    ws = new WebSocket(`ws://${location.host}`);
-    ws.binaryType = "arraybuffer";
-
-    ws.onopen = () => {
-      console.log("WS CONNECTED");
-    };
-
-    ws.onmessage = event => {
-
-  
-   if (typeof event.data === "string"){
-
-        const msg = JSON.parse(event.data);
-        console.log("RECIEVE EVENT MESSAGE",msg);
-        
-        if (msg.type === "CLEAR_STREAM"){
-            console.log("🔁 CLEAR_STREAM RECEIVED",msg.message);
-            resetMSE(); // 🔑 CRITICAL
-            setTimeout(() => RESTART_MSE(), 500);
-            return;
-        }
-
-        if (msg.type === "RESET_STREAM" || msg.type ===  "STREAM_RESTART"){
-          console.log("🔁 RESET_STREAM || STREAM_RESTART RECEIVED :::",msg.message);
-          stopWSStream();          // close socket cleanly
-          setTimeout(startWSStream, 1000); // restart clean
-           return;
-         }
-
-          if (msg.type === "STREAM_READY") {
-             console.log("🔁 STREAM_READY RECEIVED:::",msg.message);
-            queue = [];
-            headerReceived = false;
-           
-        //     if (sourceBuffer && !sourceBuffer.updating) {
-        //    try {
-        //     const buffered = sourceBuffer.buffered;
-        //     if (buffered.length > 0) {
-        //       console.log("🧹 Clearing existing buffer");
-        //       sourceBuffer.remove(buffered.start(0), buffered.end(buffered.length - 1));
-        //     }
-        //   } catch (e) {
-        //     console.warn("⚠️ Failed to clear buffer:", e);
-        //   }
-        // }
-      return;
-         }
-
-           if (msg.type === "ERROR") {
-              console.log("🔁 ERROR RESET_STREAM RECEIVED ::",msg.message);
-          //  stopWSStream();          // close socket cleanly
-        //  setTimeout(startWSStream, 3000); // restart clean
-         }
-
-         return;
-      }
-      
-    const chunk = new Uint8Array(event.data);
-      // Validate chunk size
-    if (chunk.length === 0) {
-      console.warn("⚠️ Received empty chunk, ignoring");
-      return;
-    }
-    
-    if (chunk.length < 8) {
-      console.warn("⚠️ Chunk too small to be valid MP4 data");
-      return;
-    }
-
-  
-    // if (!headerReceived) {  ws.send(JSON.stringify({ type: "STREAM_HEADER", message: "SEND HEADER"}));     }
-     // 🔑 CRITICAL: Check if this is the MP4 header (ftyp box)
-    const isHeader = chunk.length >= 4 && 
-                     chunk[4] === 0x66 && // 'f'
-                     chunk[5] === 0x74 && // 't'
-                     chunk[6] === 0x79 && // 'y'
-                     chunk[7] === 0x70;   // 'p'
-
-    if (isHeader && !headerReceived) {
-      console.log("📦 MP4 HEADER RECEIVED, size:", chunk.length);
-      headerReceived = true;
-    }
-
-     if (!isMediaSourceReady) {
-      console.warn("⚠️ MediaSource not ready yet, queuing chunk:", chunk.length);
-      queue.push(chunk);
-      return;
-    } 
-       if (!mediaSource && mediaSource.readyState !== "open") {
-         console.warn("⚠️ MediaSource not open, dropping chunk",chunk.length);
-         queue.push(chunk);  
-         return;
-      }
-
-     if (!sourceBuffer) {
-      console.warn("⚠️ SourceBuffer not created, queuing chunk:", chunk.length);
-      queue.push(chunk);
-      return;
-    }
-
-       if (!mediaSource ) {
-        console.warn("⚠️ MediaSource is null dropping chunk",chunk.length);
-       resetMSE(); // 🔑 CRITICAL
-         queue = [];
-        headerReceived = false;
-         setTimeout(() => RESTART_MSE(), 100);
-        ws.send(JSON.stringify({ type: "STREAM_HEADER", message: "SEND HEADER"})); 
-         return;
-      }
-
-
-
-
-  
-      //console.warn("🔁 chunk RECEIVED",chunk);
-      if (chunk && !sourceBuffer.updating && queue.length === 0) {
-        
-       try {
-      //  console.log(`📦 Appending chunk directly (${chunk.length} bytes)`);
-        sourceBuffer.appendBuffer(chunk);
-      } catch (e) {
-        console.error("❌ appendBuffer error:", e);
-        queue.push(chunk); // Queue on error
-      }
-
-      } else if(chunk){
-        queue.push(chunk);
-       //  console.log(`📦 Queued chunk (queue length: ${chunk.length})`);
-      }else{ console.log(` ⚠️ chunk or media buffer error chuck length: ${chunk.length})`);  }
-
-   
-    };
-
-    ws.onerror = err => {
-      console.error("WS ERROR", err);
-    };
-
-    ws.onclose = (event) => {
-        console.log(`🔌 WS CLOSED (code: ${event.code}, reason: ${event.reason})`);
-         stopWSStream();
-    };
-
-  };
-
-
-
-
-
-
-
-
 startBtn.onclick = async () => {
 //const filename = filenameInput.value;
 
@@ -819,7 +1093,7 @@ stopBtn.onclick = async () => {
     state = "IDLE";
     filenameInput.disabled = false;
     updateUI();
-  // startWSStream(); // 🔥 resume live view
+   setTimeout(startWSStream, 2000); // restart clean
     
 
   }catch (err){
@@ -829,3 +1103,4 @@ stopBtn.onclick = async () => {
 };
 
 restoreRecordingState();
+startWSStream();

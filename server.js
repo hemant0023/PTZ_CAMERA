@@ -1,8 +1,8 @@
-const major = Number(process.versions.node.split(".")[0]);
-if (major < 16) {
-  console.error("❌ Node.js v16+ required. Found:", process.versions.node);
-  process.exit(1);
-}
+// const major = Number(process.versions.node.split(".")[0]);
+// if (major < 16) {
+//   console.error("❌ Node.js v16+ required. Found:", process.versions.node);
+//   process.exit(1);
+// }
 //   "scripts": {
 //     "start": "nodemon server.js",
 //      "dev": "nodemon server.js"
@@ -33,119 +33,64 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
-
-
-
-function detectSdCard(callback) {
-
-  exec("lsblk -o NAME,TYPE,MOUNTPOINT", (error, stdout, stderr) => {
-   if (error || !stdout) {
-      console.error("detectSdCard lsblk error:", error);
-      return callback(null);
-    }
-    const lines = stdout.split("\n");
-    for (const line of lines) {
-      // Look for mmc block device partition
-      if (line.includes("mmc") && line.includes("/media")) {
-        const parts = line.trim().split(/\s+/);
-        const mountPoint = parts[parts.length - 1];
-
-        return callback(mountPoint);
-      }
-    }
-
-    callback(null); // SD not found
-  });
-}
-
-
-function detectUsbCamera(callback) {
-
-  exec("ls /dev/video*", (err, stdout) => {
-    if (err || !stdout) return callback(null);
-
-    exec("v4l2-ctl --list-devices", (err2, out) => {
-      if (err2 || !out) return callback(null);
-
-      const match = out.match(/\/dev\/video\d+/);
-      callback(match ? match[0] : null);
-    });
-  });
-}
-
-function GET_DATE_TIME_FORMATED() {
-  const now = new Date();
-
-  const pad = n => String(n).padStart(2, "0");
-
-  return `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}_` +
-         `${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`;
-}
-
- 
-function GET_DATE_FORMATED() {
-  const now = new Date();
-  const pad = n => String(n).padStart(2, "0");
-
-  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
-}
-let  sdMountPoint = null;
-let videosDir = null;
-detectSdCard(mount => {
-  if (!mount) {
-    console.error("❌ SD CARD NOT DETECTED");
-  } else {
-    console.log("✅ SD CARD DETECTED AT POINT:", mount);
-    //const videosDir = path.join(__dirname, "videos", GET_DATE_FORMATED());
-    videosDir = path.join(mount, "videos", GET_DATE_FORMATED());
-    app.use("/videos", express.static(path.join(mount, "videos")));
-    
-
-    sdMountPoint = mount;
-    if (!fs.existsSync(videosDir)){
-    console.log("RECORDING FILE PATH NOT EXIST:", videosDir);
-    fs.mkdirSync(videosDir, { recursive: true });
-     }
-}
-});
-
-
 app.get("/", (req, res) => {
      console.log("/index.html request recieve");
    res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
-// function getUniqueFilePath(dir, baseName, ext) {
-//   let filePath = path.join(dir, `${baseName}${ext}`);
-//   let counter = 1;
-//   while (fs.existsSync(filePath)){
-//     filePath = path.join(dir, `${baseName}_${counter}${ext}`);
-//     counter++;
-//   }
-//   return filePath;
-// }
-function getUniqueFilePath(dir, baseName, ext){
-  //  strip any directory from basename
-  baseName = path.basename(baseName, path.extname(baseName));
-
-  //  normalize extension
-  ext = ext.startsWith(".") ? ext : `.${ext}`;
-
-  let counter = 0;
-  let filePath;
-
-  do {
-    const suffix = counter === 0 ? "" : `_${counter}`;
-    filePath = path.join(dir, `${baseName}${suffix}${ext}`);
-    counter++;
-  } while (fs.existsSync(filePath));
-
-  return filePath;
-}
 
 
+let  sdMountPoint = null;
+let  videosDir = null;
 let ffmpegProcess = null;
 //let CAMERA_CONFIGURATION_CAP = {};
+let ffmpegStopping = false;
+let lastStopTs = 0;
+let CAMERA_USB_PORT_ERROR_SOLVE_TIME_STAAMP= 0;
+ 
+let deadClients = [];
+let WESOCKET_CONNECTED_FLAG= false;
+let WESOCKET_SEND_DATA_CONNECTED_FLAG = true;
+let ALLOWED_LIVE_FLAG = true;
+const liveClients = new Set(); 
+let LIVE_STREAM_ENABLED = true;
+let mp4Header = null;           // ftyp + empty_moov
+const MAX_BUFFER    = 3 * 1024 * 1024; // 2 MB
+
+
+const MIN_STOP_INTERVAL_MS    = 1500;   // ⏱ no double stop spam
+const DEVICE_RELEASE_DELAY_MS = 800;
+
+
+let RECORDING_STATE = {
+  status : "IDLE",
+  active: false,
+  paused: false,
+  filename: null,
+  FINAL_FINAL_NAME : null,
+  folder_name: null,
+  FINAL_FILE_PATH: null,
+  REC_START_TIME: null,
+  REC_STOP_TIME : null,
+  REC_VIDEO_DURATION: null,
+  pausedAt: null,
+  totalPausedMs: 0,
+  segments: [], 
+  curr_segment: null
+};
+ 
+let FFMPEG_ERROR = {
+
+  result: null,
+  reason: null,
+  SPAWN_FAILED: 1,
+  DEVICE_BUSY: 2,
+  INVALID_ARGUMENT: 3,
+  PROCESS_EXITED: 4,
+  UNKNOWN: 99
+
+};
+
 let CAMERA_CONFIGURATION = {
    
    format: "h264", // mjpeg | yuyv | h264
@@ -163,6 +108,202 @@ let CAMERA_CONFIGURATION_CAP = {
   resolutions: ["320x240","480x272","424x240","640x360","640x480","720x480","800x448","800x600","1024x576","1024x768","1280x720","1920x1080","2560x1440"],
   fps: [10,15,20,24,25,30,50,60]
 };
+
+
+
+
+function GET_DATE_TIME_FORMATED() {
+  const now = new Date();
+
+  const pad = n => String(n).padStart(2, "0");
+
+  return `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}_` +
+         `${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`;
+}
+
+ 
+function GET_DATE_FORMATED() {
+  const now = new Date();
+  const pad = n => String(n).padStart(2, "0");
+
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+}
+
+
+// khadas@camera:~/CAMERA_PROJECT$ df -k /media/khadas/B708-BB9D
+// Filesystem     1K-blocks    Used Available Use% Mounted on
+// /dev/mmcblk1p1   7753728 5040224   2713504  66% /media/khadas/B708-BB9D
+
+
+function getFreeSpaceMB(mountPoint, callback) {
+  exec(`df -k "${mountPoint}"`, (err, stdout) => {
+    if (err || !stdout) {
+      console.error("df error:", err);
+      return callback(null);
+    }
+
+    const lines = stdout.trim().split("\n");
+    if (lines.length < 2) return callback(null);
+
+    // Filesystem 1K-blocks Used Available Use% Mounted on
+    const parts = lines[1].trim().split(/\s+/);
+    const availableKB = parseInt(parts[3], 10);
+
+    if (isNaN(availableKB)) return callback(null);
+
+    const availableMB = Math.floor(availableKB / 1024);
+    callback(availableMB);
+  });
+}
+
+// function detectSdCard(callback) {
+
+//   exec("lsblk -o NAME,TYPE,MOUNTPOINT", (error, stdout, stderr) => {
+//    if (error || !stdout) {
+//       console.error("SD CARD detectSdCard lsblk error:", error);
+//       return callback(null);
+//     }
+//     const lines = stdout.split("\n");
+//     for (const line of lines) {
+//       // Look for mmc block device partition
+//       if (line.includes("mmc") && line.includes("/media")){
+//         const parts = line.trim().split(/\s+/);
+//         sdMountPoint = parts[parts.length - 1];
+//        console.log("✅ SD CARD DETECTED AT MOUNT POINT:", sdMountPoint);
+//     //const videosDir = path.join(__dirname, "videos", GET_DATE_FORMATED());
+//       videosDir = path.join(sdMountPoint, "videos", GET_DATE_FORMATED());
+      
+//       if (!fs.existsSync(videosDir)){
+//          console.log("SD CARD RECORDING FILE PATH NOT EXIST CREATING NEW :", videosDir);
+//         fs.mkdirSync(videosDir, { recursive: true });
+//       }
+
+//        getFreeSpaceMB(sdMountPoint, (freeMB) => {
+//           if (freeMB === null) {
+//             console.error("❌ Unable to determine SD card free space");
+//             return callback(null);
+//           }
+
+//           console.log(`💾 SD CARD FREE SPACE: ${freeMB} MB`);
+
+//           const MIN_REQUIRED_MB = 100; // choose your limit
+
+//           if (freeMB < MIN_REQUIRED_MB) {
+//             console.error("❌ SD CARD LOW STORAGE — recording blocked");
+//             return callback(null);
+//           }
+
+//           console.log("✅ SD CARD STORAGE OK — recording allowed");
+//           callback(sdMountPoint,freeMB);
+//         });
+
+//         return; // stop scanning further lines
+
+//         //return callback(sdMountPoint);
+//       }
+//     }
+
+//     callback(null); // SD not found
+//   });
+// }
+
+
+ const SD_CARD_MIN_REQUIRED_MB = 100;
+          let SD_CARD_FREE_SPACE = 0;
+
+function detectSdCard(callback) {
+
+  exec("lsblk -o NAME,TYPE,MOUNTPOINT", (error, stdout) => {
+    if (error || !stdout) {
+      console.error("SD CARD detectSdCard lsblk error:", error);
+      return callback(null, null);
+    }
+
+    const lines = stdout.split("\n");
+
+    for (const line of lines) {
+      if (line.includes("mmc") && line.includes("/media")) {
+
+        const parts = line.trim().split(/\s+/);
+         sdMountPoint = parts[parts.length - 1];
+
+        console.log("✅ SD CARD DETECTED AT MOUNT POINT:", sdMountPoint);
+
+        videosDir = path.join(sdMountPoint, "videos", GET_DATE_FORMATED());
+
+        if (!fs.existsSync(videosDir)) {
+          console.log("📁 Creating recording path:", videosDir);
+          fs.mkdirSync(videosDir, { recursive: true });
+        }
+
+        getFreeSpaceMB(sdMountPoint, (freeMB) => {
+          if (freeMB == null) {
+            console.error("❌ Unable to determine SD card free space");
+            return callback(null, null);
+          }
+         SD_CARD_FREE_SPACE = freeMB;
+         
+          console.log(`💾 SD CARD FREE SPACE: ${SD_CARD_FREE_SPACE} MB`);
+
+         
+
+          if (freeMB < SD_CARD_MIN_REQUIRED_MB) {
+            console.error("❌ SD CARD LOW STORAGE — recording blocked");
+            //return callback(null, freeMB);
+          }
+
+          console.log("✅ SD CARD STORAGE OK — recording allowed");
+          callback(sdMountPoint, freeMB);
+        });
+
+        return; // stop loop after first valid SD
+      }
+    }
+
+    console.warn("❌ SD CARD NOT FOUND");
+    callback(null, null);
+  });
+}
+
+
+
+function detectSdCardAsync() {
+  return new Promise(resolve => { detectSdCard((mount, size) => { resolve({ mount, size });});});
+}
+
+
+detectSdCard((mount, SIZE) => {
+ 
+  if (!mount) {console.error("❌ SD CARD NOT DETECTED");
+  }else{
+    console.error("SD CARD DETECTED AVAILABLE CAPACITY MB:",SIZE);
+    app.use("/videos", express.static(path.join(sdMountPoint, "videos")));
+}
+
+});
+
+
+
+
+function getUniqueFilePath(dir, baseName, ext){
+  
+  baseName = path.basename(baseName, path.extname(baseName));
+  //  normalize extension
+  ext = ext.startsWith(".") ? ext : `.${ext}`;
+
+  let counter = 0;
+  let filePath;
+
+  do {
+    const suffix = counter === 0 ? "" : `_${counter}`;
+    filePath = path.join(dir, `${baseName}${suffix}${ext}`);
+    counter++;
+  } while (fs.existsSync(filePath));
+
+  return filePath;
+}
+
+
 
 // function CAMERA_CONFIGURATION_CAPABILITIES(videoDev, callback){
 //   //v4l2-ctl -d /dev/video0 --list-formats-ext
@@ -210,26 +351,6 @@ let CAMERA_CONFIGURATION_CAP = {
 
 
 
-// detectUsbCamera(videoDev => {
-//   if (!videoDev) {
-//     console.error("No USB camera detected at startup");
-//     return;
-//   }
-
-//   cameraDevice = videoDev;
-
-//   CAMERA_CONFIGURATION_CAPABILITIES(videoDev, caps => {
-//     if (!caps) {
-//       console.error("Failed to load camera capabilities");
-//       return;
-//     }
-
-//     //cameraCapabilities = caps;
-
-//    // console.log("Camera capabilities loaded:",cameraCapabilities);
-//    // console.dir(cameraCapabilities, { depth: null });
-//   });
-// });
 
 
 app.get("/api/camera/config", (req, res) => {
@@ -291,47 +412,7 @@ app.post("/api/camera/config", (req, res) => {
 });
 
 
-let ffmpegStopping = false;
-let lastStopTs = 0;
 
-let WESOCKET_SEND_DATA_CONNECTED_FLAG = true;
-const MIN_STOP_INTERVAL_MS    = 1500;   // ⏱ no double stop spam
-const DEVICE_RELEASE_DELAY_MS = 800;
-const liveClients = new Set(); 
-let LIVE_STREAM_ENABLED = true;
-let ALLOWED_LIVE_FLAG = true;
-let WESOCKET_CONNECTED_FLAG= false;
-let mp4Header = null;           // ftyp + empty_moov
-const MAX_BUFFER = 2 * 1024 * 1024; // 2 MB
-
-let RECORDING_STATE = {
-  status : "IDLE",
-  active: false,
-  paused: false,
-  filename: null,
-  FINAL_FINAL_NAME : null,
-  folder_name: null,
-  FINAL_FILE_PATH: null,
-  REC_START_TIME: null,
-  REC_STOP_TIME : null,
-  REC_VIDEO_DURATION: null,
-  pausedAt: null,
-  totalPausedMs: 0,
-  segments: [], 
-  curr_segment: null
-};
- 
-let FFMPEG_ERROR = {
-
-  result: null,
-  reason: null,
-  SPAWN_FAILED: 1,
-  DEVICE_BUSY: 2,
-  INVALID_ARGUMENT: 3,
-  PROCESS_EXITED: 4,
-  UNKNOWN: 99
-
-};
 
 app.get("/api/recording/status", (req, res) => {
   res.json({
@@ -352,9 +433,6 @@ function getNextSegmentPath(baseFilename) {
   const name = `${baseFilename}_part${index}`;
   return getUniqueFilePath(videosDir, name, CAMERA_CONFIGURATION.EXTENSION);
 }
-
-
-
 
 
 
@@ -419,6 +497,7 @@ async function findCameraPortPath(){
 
 
 async function findCameraPortPath2() {
+
   try {
     const usbDevices = fs.readdirSync("/sys/bus/usb/devices");
      console.error("USB DEVICE LIST",usbDevices);
@@ -446,8 +525,8 @@ async function findCameraPortPath2() {
 
         for (const entry of entries) {
          // console.error("DEVICE entries CHECK",entries);
-          const videoPath = path.join(base, entry, "video4linux");
-         console.error("DEVICE videoPath CHECK",videoPath);
+         const videoPath = path.join(base, entry, "video4linux");
+        // console.error("DEVICE video4linux CHECK",videoPath);
           if (fs.existsSync(videoPath)){
             const videoNode = fs.readdirSync(videoPath)[0];
 
@@ -1426,10 +1505,13 @@ async function killFFmpeg(reason = "UNKNOWN") {
 
   try {
      // 🔑 REMOVE ALL LISTENERS FIRST
-     ffmpegProcess.stdout.removeAllListeners();
-     ffmpegProcess.stderr.removeAllListeners();
-     ffmpegProcess.removeAllListeners();
+    // ffmpegProcess.stdout.removeAllListeners();
+    // ffmpegProcess.stderr.removeAllListeners();
     
+
+     ffmpegProcess.stdout.removeAllListeners("data");
+    ffmpegProcess.stderr.removeAllListeners("data");
+     ffmpegProcess.removeAllListeners();
     // Unpipe stdout to prevent buffering
      ffmpegProcess.stdout.unpipe();
 
@@ -1475,6 +1557,7 @@ async function killFFmpeg(reason = "UNKNOWN") {
   ffmpegProcess = null;
   ffmpegStopping = false;
   mp4Header = null;
+  ALLOWED_LIVE_FLAG = true; 
   console.log("✅ FFMPEG FULLY KILLED");
 }
 // scriptchild.kill('SIGTERM'); // Default - graceful shutdown (15)
@@ -1505,10 +1588,16 @@ async function stopFFmpeg(reason = "UNKNOWN"){
   }
 
   // 🔒 lock
+
   ffmpegStopping = true;
   lastStopTs = now;
   console.log("📝 Sending SIGINT to FFmpeg (graceful shutdown)  PID VALUE ",ffmpegProcess.pid);
   try{
+     ffmpegProcess.stdout.removeAllListeners("data");
+    ffmpegProcess.stderr.removeAllListeners("data");
+     ffmpegProcess.removeAllListeners();
+    // Unpipe stdout to prevent buffering
+     ffmpegProcess.stdout.unpipe();
     ffmpegProcess.kill("SIGTERM");
   } catch (e) {
     console.warn("⚠️ FFmpeg already dead");
@@ -1526,7 +1615,7 @@ async function stopFFmpeg(reason = "UNKNOWN"){
   ffmpegProcess = null;
   ffmpegStopping = false;
   mp4Header = null;
-
+ALLOWED_LIVE_FLAG = true; 
 }
 
 
@@ -1540,12 +1629,10 @@ function getReadyStateName(state) {
   }
 }
 
-let CAMERA_USB_PORT_ERROR_SOLVE_TIME_STAAMP=0;
+
 async function CAMERA_USB_PORT_ERROR_SOLVE(state) {
 
 // When camera fails
-
-
 
   const now = Date.now();
   let recovered = false;
@@ -1560,36 +1647,42 @@ async function CAMERA_USB_PORT_ERROR_SOLVE(state) {
   // Try 1: Simple bind
   recovered = await resetCameraDevice(state);
   if (!recovered){
-    // Try 2: Full unbind/bind cycle
-    console.log("⚠️ FAILED RE-ATTEMPTED Trying USB hardware reset...");
+    console.log("⚠️ FAILED RECOVERY Trying USB hardware reset...");
     recovered = await resetCameraDevice("RESET_USB");
-    //console.log("⚠️FAILED RE-ATTEMPTED Trying full unbind/bind cycle...");
-    //recovered = await resetCameraDevice("RE_UN_BIND_USB");
   }
-  
-  // if (!recovered){   // Try 3: Hardware reset
-  //   console.log("⚠️ FAILED RE-ATTEMPTED Trying USB hardware reset...");
-  //   recovered = await resetCameraDevice("RESET_USB");
-  // }
-  
-  if (!recovered) {
+  if(!recovered){
     console.error("❌ All recovery attempts failed");
-    // Manual intervention needed
-  }
+   }
+ 
 
 }
 
-  // const usb_device =  findCameraPortPath2();
-  // if (usb_device || usb_device.videoNode){
-  //   console.log(" CAMERA CONFIG:", CAMERA_CONFIGURATION);
-  //    console.log("✅ Camera detected:", usb_device);
-  // CAMERA_CONFIGURATION.DEVICE_NODE = usb_device.videoNode;
-  //  console.log("UPDATED CAMERA CONFIG:", CAMERA_CONFIGURATION);
 
-  // }
+let initBuffer;
+let initReady = false;
 
+function findMoovEnd(buffer) {
+  let offset = 0;
 
- let deadClients = [];
+  while (offset + 8 <= buffer.length) {
+    const size = buffer.readUInt32BE(offset);
+    const type = buffer.toString("ascii", offset + 4, offset + 8);
+
+    if (size < 8) return null;
+
+    if (type === "moov") {
+      const end = offset + size;
+      if (buffer.length >= end) {
+        return end;
+      }
+      return null; // moov not fully arrived yet
+    }
+
+    offset += size;
+  }
+  return null;
+}
+
 function RUN_FFMPEG_ARGUMENT_COMMAND({ outputPath = null, enableLive = false }){
 
   if (ffmpegProcess  || ffmpegStopping ) {
@@ -1635,6 +1728,9 @@ FFMPEG_ERROR.reason = "------";
     args.push(
      "-flush_packets","1",
     "-f", "mp4",//"h264"
+    "-g" ,"30",
+    "-keyint_min","30",
+    "-sc_threshold","0",
     "-movflags", "frag_keyframe+empty_moov+default_base_moof",
     "-frag_duration", "100000",   // 100ms fragments
     "pipe:1"
@@ -1670,20 +1766,52 @@ FFMPEG_ERROR.reason = "------";
   if (enableLive && WESOCKET_CONNECTED_FLAG){
      
     mp4Header = null;
-
+    initReady = false;
+     liveClients.forEach(ws => {ws.isInitSent = false;});
+    initBuffer = Buffer.alloc(0);
+   
       ffmpegProcess.stdout.on("data", chunk => {
       
       //  console.log(" Size:", chunk.length, "bytes"); 
        //  console.log(" chunk", chunk); 
-      if (!mp4Header && WESOCKET_SEND_DATA_CONNECTED_FLAG ){
-         mp4Header = chunk;
-        console.log("📦 MP4 header captured (size):", mp4Header.length);
-        console.log("📦 MP4 header captured",mp4Header);
-      }
+     
+       // if (!mp4Header && WESOCKET_SEND_DATA_CONNECTED_FLAG ){
+      //    mp4Header = chunk;
+      //    console.log("📦 MP4 header captured (size):", mp4Header.length);
+      //    console.log("📦 MP4 header captured",mp4Header);
+      // }
 
+  /* 🔴 INIT SEGMENT CAPTURE */
+  if (!initReady && !mp4Header) {
+
+         console.log("chunk Size:", chunk.length, "bytes"); 
+         console.log(" chunk", chunk); 
+       initBuffer = Buffer.concat([initBuffer, chunk]);
+ 
+   
+    const moovEnd = findMoovEnd(initBuffer);
+     console.log("📦init buffer   ",moovEnd);
+   if ( moovEnd){
+     // mp4Header = chunk;
+      mp4Header = initBuffer.slice(0, moovEnd);
+      initReady = true;
+      console.log("📦 MP4 header captured (size):", mp4Header.length);
+      console.log("📦 MP4 header captured",mp4Header);
+     
+      
+      chunk = initBuffer.slice(moovEnd);  // remaining bytes are media data
+      console.log("📦init left chunk (size)   ",chunk.length);
+      console.log("📦init left chunk    ",chunk);
+      initBuffer = null;
+    } else {
+     console.log("📦 MP4 moov header pending to moov end ");
+     return;
+    }
+  }
+
+ 
  let index = 0;
-
-  liveClients.forEach(ws => {
+  liveClients.forEach(ws => { 
 
     index++;
     const info = {
@@ -1693,16 +1821,25 @@ FFMPEG_ERROR.reason = "------";
       ip: ws._socket?.remoteAddress || "unknown",
       port: ws._socket?.remotePort || "unknown"
     };
-     if( WESOCKET_CONNECTED_FLAG && WESOCKET_SEND_DATA_CONNECTED_FLAG){
-      
-    if (ws.readyState === WebSocket.OPEN && ws.bufferedAmount < MAX_BUFFER){
 
-           ws.send(chunk);
+     if (!ws.isInitSent && mp4Header){
+          ws.send(mp4Header);
+          ws.isInitSent = true;
+          ws.waitForFirstKeyframe = true; // 🔑
+          console.log("📦 MP4 Init segment sent (late)");
+          //return;
+        } 
+
+     if( ws.isInitSent && WESOCKET_CONNECTED_FLAG && WESOCKET_SEND_DATA_CONNECTED_FLAG ){
+      
+    if ( ws.readyState === WebSocket.OPEN && ws.bufferedAmount < MAX_BUFFER){
+          if(chunk.length > 0){
+           ws.send(chunk); }
         //  console.log("🧩 Client Info:", info);
       // console.log(`✅ Data sent to client #${index} (${chunk.length} bytes)`); 
     }else{
 
-      console.warn(`⚠️ Data NOT sent to client #${index}  DELETE CLIENT `);
+      console.log(`⚠️ Data NOT sent to client #${index}  DELETE CLIENT buffer #${ws.bufferedAmount} <  #${MAX_BUFFER}` );
       console.log("🧩 Client Info:", info);
          deadClients.push(ws);
          liveClients.delete(ws);
@@ -1710,7 +1847,7 @@ FFMPEG_ERROR.reason = "------";
        }
 
   }else{ 
-             console.warn(`⚠️ ffmpegProcess Data NOT sent to client #${index}`);
+             console.warn(`⚠️ ffmpegProcess Data NOT sent to client #${index} chunck length `,chunk.length);
               console.log("🧩 Client Info:", info); 
               // deadClients.push(ws);
               //liveClients.delete(ws);
@@ -1725,6 +1862,10 @@ FFMPEG_ERROR.reason = "------";
          console.log("wss CLOSING WS CLIENT IN RESET ...",liveClients.length);
        if (ws.readyState === ws.OPEN) {
           ws.close(1000, "STOP EVENT RESET"); // SERVER ERROR
+          WESOCKET_CONNECTED_FLAG = false;
+          if (ffmpegProcess){
+             stopFFmpeg("🛑 NO LIVE CLIENTS → STOPPING LIVE FFMPEG");
+            }
        }
       }
 
@@ -1855,17 +1996,8 @@ function notifyLiveClientsReset(){
   });
 }
 
-function detectSdCardAsync() {
-  return new Promise(resolve => {
-    detectSdCard(mount => resolve(mount));
-  });
-}
 
-function detectUsbCameraAsync() {
-  return new Promise(resolve => {
-    detectUsbCamera(dev => resolve(dev));
-  });
-}
+
 
 
 app.post("/start", async (req, res) => {
@@ -1885,10 +2017,17 @@ app.post("/start", async (req, res) => {
 
     const { filename } = req.body;
 
-    // 🔍 Hardware checks (NOW REAL async)
-    const sdMount = await detectSdCardAsync();
-    if (!sdMount) {
+    // // 🔍 Hardware checks (NOW REAL async)
+    // const sdMount = await detectSdCardAsync();
+    // if (!sdMount) {
+    //   return res.status(400).json({ error: "SD_CARD_NOT_DETECTED" });
+    // }
+
+    const { mount, size } = await detectSdCardAsync();
+     if (!mount) {
       return res.status(400).json({ error: "SD_CARD_NOT_DETECTED" });
+    }else if(mount && size <= SD_CARD_MIN_REQUIRED_MB){
+       return res.status(400).json({ error: "SD_CARD_CAPACITY_FULL" });
     }
 
     const videoDev = await findCameraPortPath2();
@@ -1903,23 +2042,7 @@ app.post("/start", async (req, res) => {
   console.log(" FINAL CAMERA_CONFIGURATION:", CAMERA_CONFIGURATION);
 
 
-    // const videoDev = await detectUsbCameraAsync();
-    // if (!videoDev) {
-    //   return res.status(400).json({ error: "HD_CAMERA_NOT_DETECTED" });
-    // }
-
-    // 🔑 CHECK DEVICE READINESS
-    // const isReady = await waitForCameraReady();
-    // if (!isReady) {
-    //   // Try to reset and check again
-    //  // await resetCameraDevice();
-
-    //   const isReadyAfterReset = await waitForCameraReady();
-    //   if (!isReadyAfterReset) {
-    //     return res.status(500).json({ error: "CAMERA_NOT_READY" });
-    //   }
-    // }
-
+  
 
     // 🧠 Filename logic
     const FILE_NAME_TEMP = typeof filename === "string" && filename.trim() ? filename.trim() : `video_${GET_DATE_TIME_FORMATED()}`;
@@ -2615,8 +2738,17 @@ function waitForFFmpegClose() {
 wss.on("connection", async (ws, req) => {
 
   console.log("WS CLIENT CONNECTED REQUEST");
-
+   ws.isInitSent = false;
   liveClients.add(ws);
+   WESOCKET_CONNECTED_FLAG = true;
+  console.log("wss CONNECT REQ LIVE CLIENT COUNT: ", liveClients.size,RECORDING_STATE.active);
+  // 🚀 If init segment already available, send immediately
+  if (ffmpegProcess && mp4Header && ws.readyState === WebSocket.OPEN && !ws.isInitSent ) {
+  //  ws.send(mp4Header);
+   // ws.isInitSent = true;
+    //console.log("📦 WSS Init mp4Header segment sent to new client",mp4Header);
+  }
+
   const clientId = Date.now() + Math.random().toString(36).substr(2, 9);
   const clientIp = req.socket.remoteAddress;
   const clientIport  = req.socket.remotePort;
@@ -2628,21 +2760,18 @@ wss.on("connection", async (ws, req) => {
   console.log(`   port: ${clientIport}`);
   console.log(`   family: ${clientIFamily}`);
 
-  WESOCKET_CONNECTED_FLAG = true;
-  console.log("wss CONNECT REQ LIVE CLIENT COUNT: ", liveClients.size,RECORDING_STATE.active);
 
  //🔑 KEY FIX: Don't start new FFmpeg if recording is active
   ws.onmessage = event => { 
 
     if (typeof event.data === "string"){
+
         const msg = JSON.parse(event.data);
         console.log("WSS RECIEVE EVENT MESSAGE",msg);
+        
         if (msg.type === "STREAM_HEADER"){
             console.log("🔁 VIDEO HEADER REQ ",msg.message);
-             if (mp4Header){
-              // console.log("📦 Sending MP4 header to new client",mp4Header);
-              //  ws.send(mp4Header);
-                }
+            ws.isInitSent = false;
             return;
         }
 
@@ -2650,38 +2779,19 @@ wss.on("connection", async (ws, req) => {
 
   }
 
- if (RECORDING_STATE.active) {
-    console.log("📹 Recording active - client joining existing stream");
-    // Send header to new client if available
-    await new Promise(r => setTimeout(r, 3000));
-    if (mp4Header){
-      console.log("📦 Sending MP4 header to new client",mp4Header);
-      ws.send(mp4Header);
-    }
-
-    // Notify client that stream is ready
-    ws.send(JSON.stringify({ type: "STREAM_READY",message: RECORDING_STATE.status }));
-     return; // Don't start new FFmpeg
-  
-  }
-
- if(ffmpegStopping && ffmpegProcess ){
+ if(ffmpegStopping && ffmpegProcess){  /// ALWAYS FIRST 
     console.log("📦 WAIT ffmpegStopping IS TRUE BEFORE STARTING NEW LIVE ",);
      await new Promise(r => setTimeout(r, 3000));
   }
 
-
-if (ffmpegProcess){
-    console.log("📺 Live stream already running - adding client");
-      ws.send(JSON.stringify({ type: "STREAM_READY", message: "ALREADY LIVE SESSION STARTED SENDDING MP4 HEADER"}));
-      await new Promise(r => setTimeout(r, 3000));
-    if (mp4Header) {
-      console.log("📦 Sending MP4 header to new client",mp4Header);
-     ws.send(mp4Header);
-    }
-   return;
+if (ffmpegProcess || RECORDING_STATE.active){
+    console.log("📺 ALREADY LIVE SESSION STARTED SENDDING MP4 HEADER - NEW CLIENT ADDED");
+    ws.send(JSON.stringify({ type: "STREAM_READY", message: "ALREADY LIVE SESSION STARTED SENDDING MP4 HEADER"}));
+     ws.isInitSent = false;
+    return;
   }
 
+ 
 if ( !ALLOWED_LIVE_FLAG && !ffmpegProcess && RECORDING_STATE.active &&  liveClients.size > 1 ){
   ALLOWED_LIVE_FLAG = true;
 }
@@ -2740,7 +2850,7 @@ if ( ALLOWED_LIVE_FLAG && !ffmpegProcess ){
       }
 
     }, 1000);
-  }else{ console.log("✅ WSS LIVE STREAM ALREADY REGISTER WAIT TO CLEAN UP");    } 
+  }else{ console.log("✅ WSS LIVE STREAM ALREADY REGISTER WAIT TO CLEAN UP ALLOWED_LIVE_FLAG : ",ALLOWED_LIVE_FLAG);    } 
   
   ws.on("close", (code, reason) => {
   
@@ -2758,7 +2868,7 @@ if ( ALLOWED_LIVE_FLAG && !ffmpegProcess ){
    
 
      if (liveClients.size === 0) {
-      ALLOWED_LIVE_FLAG = true;
+         ALLOWED_LIVE_FLAG = true;
       if (RECORDING_STATE.active){
         console.log("📹 Recording active - keeping FFmpeg running");
         WESOCKET_CONNECTED_FLAG = false;
@@ -2854,148 +2964,6 @@ if ( ALLOWED_LIVE_FLAG && !ffmpegProcess ){
 
 
 
-
-// function startIdleLiveStream(){
-
-//   if (ffmpegProcess && !RECORDING_STATE.active && WESOCKET_CONNECTED_FLAG  && LIVE_STREAM_ENABLED ){
-//          console.log("KILL ffmpegProcess STREAM STOPPED");
-//          ffmpegProcess.kill("SIGINT");
-//          ffmpegProcess = null;
-//       }
-
-
-// console.log("🎥 startIdleLiveStream STARTING IDLE LIVE STREAM");
-
-//   ffmpegProcess = spawn("ffmpeg", [
-//   "-loglevel", "error",
-//   "-f", "v4l2",
-//   "-input_format", "h264",
-//   "-video_size", "1920x1080",//CAMERA_CONFIGURATION.resolution, //     
-//    "-framerate", "20",      //"-framerate",CAMERA_CONFIGURATION.fps,
-//   "-i", "/dev/video0",
-//   "-c:v", "copy",
-//   // "-c:v libx264",
-//   //"-preset", "veryfast",
-//   //"-tune", "zerolatency",
-//  // "-pix_fmt", "yuv420p",
-//   //"-profile:v", "baseline",
-//  // "-level", "4.2",
-//  // "-b:v", "5M",
-//  // "-maxrate", "5M",
-//  // "-bufsize", "10M",
-//  // "-g", "30", 
-//   // fMP4 FOR MSE
-//   "-f", "mp4",
-//   "-movflags", "frag_keyframe+empty_moov+default_base_moof",
-//   "-frag_duration", "100000",   // 100ms fragments
-//   "pipe:1"
-// ]);
-
-
-// ffmpegProcess.stdout.on("data", chunk => {
-//  console.log("FFMPEG STREAM data ",chunk);
-//  if(WESOCKET_CONNECTED_FLAG  && LIVE_STREAM_ENABLED  ){
-//   wss.clients.forEach(client => {
-//         if (client.readyState === WebSocket.OPEN) {
-//           client.send(chunk);
-//          }
-//         }); }
-
-//      });
-
-
-//   ffmpegProcess.on("close", () => {
-//     console.log("🛑 IDLE LIVE STOPPED");
-//    // ffmpegProcess = null;
-//   });
-// }
-
-
-// wss.on("connection", ws => {
-//   WESOCKET_CONNECTED_FLAG = true;
-//   console.log("WS CLIENT CONNECTED REQUEST");
-//   if(WESOCKET_CONNECTED_FLAG && LIVE_STREAM_ENABLED){
-//     console.log("BOTH LIVE STREMING STARTED ");
-//    startIdleLiveStream(); 
-//    }else{
-
-//   //   detectUsbCamera(videoDev =>{
-//   // if(!videoDev){
-//   //   console.log("HD CAMERA NOT DETECTED:");
-//   //    return res.status(400).json({ error:"HD CAMERA NOT DETECTED"});
-//   //   }
-//   // });
-
-//   if(!live_ffmpeg){
-
-//    console.log("IDLE LIVE STREMING STARTED ");
-
-//     live_ffmpeg =  spawn("ffmpeg", [
-//   "-loglevel", "error",
-//   "-f", "v4l2",
-//   "-input_format", "h264",
-//   "-video_size", "1920x1080",//CAMERA_CONFIGURATION.resolution, //     
-//    "-framerate", "20",      //"-framerate",CAMERA_CONFIGURATION.fps,
-//   "-i", "/dev/video0",
-//   "-c:v", "copy",
-//   // "-c:v libx264",
-//   //"-preset", "veryfast",
-//   //"-tune", "zerolatency",
-//  // "-pix_fmt", "yuv420p",
-//   //"-profile:v", "baseline",
-//  // "-level", "4.2",
-//  // "-b:v", "5M",
-//  // "-maxrate", "5M",
-//  // "-bufsize", "10M",
-//  // "-g", "30", 
-//   // fMP4 FOR MSE
-//   "-f", "mp4",
-//   "-movflags", "frag_keyframe+empty_moov+default_base_moof",
-//   "-frag_duration", "100000",   // 100ms fragments
-//   "pipe:1"
-// ]);
-
-//   }else{live_ffmpeg.kill("SIGINT"); }
-
-//  live_ffmpeg.stdout.on("data", chunk => {
-//   // console.log("FFMPEG STREAM data ",chunk);
-//      wss.clients.forEach(client => {
-//     if(client.readyState === WebSocket.OPEN) {
-//           client.send(chunk);
-//          }
-//         });
-//      });
-
-
-//      live_ffmpeg.on("close", () => {
-//      if( live_ffmpeg){
-//       console.log("NULL FFMPEG STREAM STOPPED");
-//     //    //live_ffmpeg.kill("SIGINT");
-//     //  // live_ffmpeg = null; 
-//       }
-//      });
-
-//   }
-
-
-//  ws.on("close", () => {
-//    console.log("WS CLIENT DISCONNECTED REQUEST ");
-//    WESOCKET_CONNECTED_FLAG = false;
-
-//     if(wss.clients.size === 0 && live_ffmpeg){
-//       console.log("KILL FFMPEG STREAM STOPPED");
-//       live_ffmpeg.kill("SIGINT");
-//       live_ffmpeg = null;
-//      }
-
-//       if (ffmpegProcess && !RECORDING_STATE.active && WESOCKET_CONNECTED_FLAG  && LIVE_STREAM_ENABLED ){
-//          console.log("KILL ffmpegProcess STREAM STOPPED");
-//          ffmpegProcess.kill("SIGINT");
-//          ffmpegProcess = null;
-//       }
-//   });
-
-// });
 
 
 
@@ -3093,7 +3061,6 @@ app.get("/api/recordings/:folder", (req, res) => {
             return {
               name: file,
               type: path.extname(file).slice(1).toUpperCase(),
-              sizeBytes: stats.size,
               sizeMB: (stats.size / (1024 * 1024)).toFixed(2),
               created: stats.birthtime
                 .toISOString()
@@ -3173,7 +3140,6 @@ app.get("/api/recordings", (req, res) => {
             try {
               const fullPath = path.join(folderPath, file);
               const stats = fs.statSync(fullPath);
-
               totalSizeBytes += stats.size;
               lastModifiedMs = Math.max(lastModifiedMs, stats.mtimeMs);
             } catch (err) {
@@ -3185,9 +3151,9 @@ app.get("/api/recordings", (req, res) => {
             name: d.name,
             path: d.name,
             fileCount: files.length,
-            totalSizeBytes, // raw value
-            totalSizeMB: (totalSizeBytes / (1024 * 1024)).toFixed(2),
-            modifiedMs: lastModifiedMs,
+          //  totalSizeBytes, // raw value
+            totalSize: (totalSizeBytes / (1024 * 1024)).toFixed(2),
+            //modifiedMs: lastModifiedMs,
             modified: lastModifiedMs
               ? new Date(lastModifiedMs).toISOString().replace("T", " ").slice(0, 19)
               : "-"
