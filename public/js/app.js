@@ -335,8 +335,8 @@ async function RESTART_MSE() {
     }
  
   try {
-
-  sourceBuffer = mediaSource.addSourceBuffer('video/mp4; codecs="avc1.64002A "');
+//avc1.640033
+  sourceBuffer = mediaSource.addSourceBuffer('video/mp4; codecs="avc1.640033 "');
   sourceBuffer.mode = "segments";
   console.log("✅ SourceBuffer created");
     
