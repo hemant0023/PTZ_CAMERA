@@ -1,0 +1,76 @@
+logLevel: info
+logDestinations: [stdout]
+
+# ---------- PERFORMANCE ----------
+readTimeout: 10s
+writeTimeout: 10s
+writeQueueSize: 1024
+udpMaxPayloadSize: 1452
+
+
+# =========================
+# RTSP SERVER SETTINGS
+# =========================
+rtsp: yes
+rtspAddress: :8554
+rtspTransports: [tcp]
+rtspEncryption: "no"
+
+# =========================
+# WEBRTC SETTINGS
+# =========================
+webrtc: yes
+webrtcAddress: :8889
+#webrtcEncryption: "no"
+webrtcAllowOrigins: ["*"]
+webrtcICEServers2: []
+
+# Reduce buffering →  # Low latency tuning
+webrtcHandshakeTimeout: 10s
+webrtcTrackGatherTimeout: 2s
+webrtcSTUNGatherTimeout: 5s
+
+# ---------- DISABLE UNUSED SERVICES ----------
+rtmp: no
+srt: no
+api: no
+metrics: no
+pprof: no
+playback: no
+
+# =========================
+# HLS (Optional fallback)
+# =========================
+hls: no
+hlsAddress: :8888
+hlsAlwaysRemux: yes
+hlsVariant: lowLatency
+hlsSegmentCount: 7
+hlsSegmentDuration: 500ms
+hlsPartDuration: 100ms
+
+pathDefaults:
+  sourceOnDemand: no
+  maxReaders: 0
+  rtspTransport: tcp
+
+# =========================
+# PATH CONFIGURATION
+# =========================
+paths:
+  live_camera:
+    source: rtsp://admin:admin@192.168.100.88:554/stream1
+    rtspTransport: tcp
+    sourceOnDemand: no
+
+    # Stability tuning
+    maxReaders: 0   # unlimited clients
+  
+
+    # Auto-reconnect if camera drops
+    sourceOnDemandStartTimeout: 10s
+    sourceOnDemandCloseAfter: 30s
+
+    # Logging hooks
+    runOnReady: echo    "[MediaMTX] Stream ready successfully"
+    runOnNotReady: echo "[MediaMTX] Stream lost"

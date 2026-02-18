@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>PTZ COMMANDER — Presets</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Share+Tech+Mono&family=Orbitron:wght@600;700;900&display=swap');
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#080c10;--panel:#0d1117;--card:#111820;--border:#1e3a5f;
+  --blue:#00aaff;--cyan:#00ffee;--green:#00ff88;
+  --red:#ff2244;--orange:#ff8800;--yellow:#ffdd00;
+  --muted:#4a6080;--text:#c8ddf0;
+  --glow-blue:0 0 20px rgba(0,170,255,.35);
+  --r:6px;--r2:12px;
+}
+html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'Rajdhani',sans-serif}
+.nav{height:52px;background:rgba(13,17,23,.97);border-bottom:2px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 20px;gap:8px;box-shadow:0 2px 24px rgba(0,170,255,.08)}
+.nav-logo{font-family:'Orbitron',sans-serif;font-size:17px;font-weight:900;color:var(--blue);letter-spacing:3px;display:flex;align-items:center;gap:8px}
+.nav-logo::before{content:'▣';font-size:20px;color:var(--cyan)}
+.nav-links{display:flex;gap:4px;flex:1;margin:0 20px}
+.nav-a{padding:6px 14px;border-radius:var(--r);text-decoration:none;color:var(--muted);font-size:13px;font-weight:600;letter-spacing:1px;text-transform:uppercase;transition:.2s;border:1px solid transparent}
+.nav-a:hover{color:var(--blue);border-color:var(--border);background:rgba(0,170,255,.06)}
+.nav-a.active{color:var(--bg);background:var(--blue);box-shadow:var(--glow-blue)}
+.container{max-width:1800px;margin:0 auto;padding:24px}
+.page-hdr{text-align:center;margin-bottom:32px}
+.page-title{font-family:'Orbitron',sans-serif;font-size:28px;font-weight:900;color:var(--blue);letter-spacing:4px;text-shadow:var(--glow-blue);margin-bottom:8px}
+.page-sub{font-size:14px;color:var(--muted);letter-spacing:2px;text-transform:uppercase}
+.presets-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px}
+.preset-card{
+  background:var(--panel);border-radius:var(--r2);padding:20px;
+  border:1.5px solid var(--border);box-shadow:0 4px 24px rgba(0,0,0,.4);
+  transition:.3s;display:flex;flex-direction:column;gap:12px;
+}
+.preset-card:hover{border-color:rgba(0,170,255,.4);transform:translateY(-3px);box-shadow:0 8px 32px rgba(0,170,255,.12)}
+.preset-card.empty{border-style:dashed;opacity:.5;align-items:center;justify-content:center;min-height:240px;cursor:pointer}
+.preset-card.empty:hover{opacity:1;border-color:var(--blue)}
+.pc-hdr{display:flex;justify-content:space-between;align-items:center}
+.pc-num{
+  width:44px;height:44px;background:linear-gradient(135deg,var(--blue),#0055cc);
+  border-radius:50%;display:flex;align-items:center;justify-content:center;
+  font-family:'Orbitron',sans-serif;font-size:18px;font-weight:900;color:var(--bg);
+  box-shadow:var(--glow-blue);
+}
+.pc-acts{display:flex;gap:6px}
+.pc-act{width:32px;height:32px;background:var(--card);border:1px solid var(--border);border-radius:var(--r);display:flex;align-items:center;justify-content:center;cursor:pointer;transition:.15s;font-size:14px}
+.pc-act:hover{background:var(--blue);color:var(--bg);border-color:var(--blue)}
+.pc-name-inp{width:100%;background:var(--card);border:1.5px solid var(--border);border-radius:var(--r);color:var(--text);padding:8px 12px;font-size:14px;font-weight:600;text-align:center;font-family:'Rajdhani',sans-serif;transition:.2s}
+.pc-name-inp:focus{outline:none;border-color:var(--blue)}
+.pc-info{background:var(--card);border-radius:var(--r);border:1px solid var(--border)}
+.pc-row{display:flex;justify-content:space-between;padding:8px 12px;border-bottom:1px solid var(--border);align-items:center}
+.pc-row:last-child{border-bottom:none}
+.pc-key{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted)}
+.pc-val{font-family:'Share Tech Mono';font-size:13px;color:var(--blue)}
+.pc-btns{display:flex;flex-direction:column;gap:6px}
+.pcbtn{padding:10px;border:none;border-radius:var(--r);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;cursor:pointer;transition:.2s;font-family:'Rajdhani',sans-serif;display:flex;align-items:center;justify-content:center;gap:6px}
+.pcbtn:hover{transform:translateY(-1px);filter:brightness(1.1)}
+.pcbtn-goto{background:linear-gradient(135deg,var(--blue),#0055cc);color:var(--bg)}
+.pcbtn-save{background:linear-gradient(135deg,var(--green),#00aa44);color:var(--bg)}
+.add-preset{display:flex;flex-direction:column;align-items:center;gap:10px;padding:20px}
+.add-icon{font-size:40px;opacity:.3}
+.add-text{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:1px;color:var(--muted)}
+
+/* Tours panel */
+.panel{background:var(--panel);border-radius:var(--r2);padding:22px;border:1px solid var(--border);margin-bottom:20px;box-shadow:0 4px 24px rgba(0,0,0,.4)}
+.p-title{font-family:'Orbitron',sans-serif;font-size:11px;font-weight:700;color:var(--blue);letter-spacing:2.5px;text-transform:uppercase;margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px}
+.p-title::before{content:'';width:3px;height:14px;background:var(--blue);border-radius:2px}
+.tour-list{display:flex;flex-direction:column;gap:10px}
+.tour-item{
+  background:var(--card);border:1.5px solid var(--border);border-radius:var(--r);
+  padding:14px 18px;display:grid;grid-template-columns:auto 1fr auto;gap:16px;align-items:center;
+  transition:.2s;
+}
+.tour-item:hover{border-color:rgba(0,170,255,.3)}
+.tour-num{width:40px;height:40px;background:var(--blue);border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:'Orbitron',sans-serif;font-weight:900;font-size:16px;color:var(--bg)}
+.tour-name{font-size:15px;font-weight:700;margin-bottom:4px}
+.tour-seq{font-size:12px;color:var(--muted);font-family:'Share Tech Mono'}
+.tour-acts{display:flex;gap:6px}
+.tour-btn{padding:8px 12px;background:var(--panel);border:1px solid var(--border);border-radius:var(--r);color:var(--text);font-size:10px;font-weight:700;cursor:pointer;text-transform:uppercase;letter-spacing:1px;font-family:'Rajdhani',sans-serif;transition:.15s}
+.tour-btn:hover{background:var(--blue);color:var(--bg);border-color:var(--blue)}
+.btn{padding:12px 20px;border:none;border-radius:var(--r);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;cursor:pointer;transition:.2s;font-family:'Rajdhani',sans-serif;display:flex;align-items:center;justify-content:center;gap:6px}
+.btn:hover{transform:translateY(-2px);filter:brightness(1.1)}
+.btn-green{background:linear-gradient(135deg,var(--green),#00aa44);color:var(--bg)}
+.toast{position:fixed;bottom:24px;right:24px;padding:13px 18px;border-radius:var(--r);font-size:13px;font-weight:600;z-index:999;transform:translateY(100px);opacity:0;transition:.4s;backdrop-filter:blur(10px)}
+.toast.ok{background:rgba(0,255,136,.15);border:1px solid var(--green);color:var(--green)}
+.toast.show{transform:translateY(0);opacity:1}
+
+@media(max-width:1500px){.presets-grid{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:1100px){.presets-grid{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:700px){.presets-grid{grid-template-columns:1fr}.nav-links{display:none}}
+</style>
+</head>
+<body>
+<nav class="navbar">
+<div class="logo">📷 CAMERA SYSTEM CONTROL</div>
+  <div class="nav-links">
+    <a href="index.html"               class="nav-a"  >LIVE VIEW</a>
+    <a href="PTZ_CONTROLS.html"        class="nav-a">PTZ CONTROL</a>
+    <a href="CAMERA_IMAGE_SETTING.html"class="nav-a ">IMAGE</a>
+    <a href="RECORDING_SETTING.html"  class="nav-a">RECORDING</a>
+    <a href="PTZ_PRESET_SETTING.html" class="nav-a" >PRESETS</a>
+    <a href="SYSTEM_INFORMATION.html" class="nav-a">SYSTEM</a>
+    <a href="config.html"             class="nav-a"> active</a>
+    <a href="records.html"            class="nav-a"> >RECORDS</a>
+  </div>
+</nav>
+
+<div class="container">
+<div class="page-hdr">
+  <h1 class="page-title">📍 PRESET POSITIONS</h1>
+  <p class="page-sub">Save · Recall · Manage Camera Positions</p>
+</div>
+
+<div class="presets-grid" id="presetsGrid">
+  <!-- Presets 1-6 rendered by JS, plus 2 empty slots -->
+</div>
+
+<!-- TOURS PANEL -->
+<div class="panel">
+  <div class="p-title">AUTO TOUR CONFIGURATION</div>
+  <div class="tour-list">
+    <div class="tour-item">
+      <div class="tour-num">1</div>
+      <div>
+        <div class="tour-name">Full Perimeter</div>
+        <div class="tour-seq">PRESET 1 → 2 → 3 → 4 → 5 → 6 → LOOP</div>
+      </div>
+      <div class="tour-acts">
+        <button class="tour-btn" onclick="runTour([1,2,3,4,5,6])">▶ PLAY</button>
+        <button class="tour-btn">✏ EDIT</button>
+        <button class="tour-btn">🗑 DEL</button>
+      </div>
+    </div>
+    <div class="tour-item">
+      <div class="tour-num">2</div>
+      <div>
+        <div class="tour-name">Entrance Monitor</div>
+        <div class="tour-seq">PRESET 1 → 2 → 1 → LOOP</div>
+      </div>
+      <div class="tour-acts">
+        <button class="tour-btn" onclick="runTour([1,2])">▶ PLAY</button>
+        <button class="tour-btn">✏ EDIT</button>
+        <button class="tour-btn">🗑 DEL</button>
+      </div>
+    </div>
+    <div class="tour-item">
+      <div class="tour-num">3</div>
+      <div>
+        <div class="tour-name">Coverage Zone A</div>
+        <div class="tour-seq">PRESET 3 → 4 → 5 → LOOP</div>
+      </div>
+      <div class="tour-acts">
+        <button class="tour-btn" onclick="runTour([3,4,5])">▶ PLAY</button>
+        <button class="tour-btn">✏ EDIT</button>
+        <button class="tour-btn">🗑 DEL</button>
+      </div>
+    </div>
+  </div>
+  <div style="display:flex;gap:10px;margin-top:16px;justify-content:flex-end">
+    <button class="btn btn-green">+ CREATE NEW TOUR</button>
+    <button class="btn" style="background:var(--red);color:#fff" onclick="stopTour()">⏹ STOP TOUR</button>
+  </div>
+</div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const api = async (path,body) => {
+  const r = await fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).catch(()=>null);
+  return r?.json().catch(()=>({})) ?? {};
+};
+
+const PRESETS = [
+  { n:1, name:"Main Entrance", pan:"0200", tilt:"FFF0", zoom:"1.0" },
+  { n:2, name:"Parking Area", pan:"FE80", tilt:"0010", zoom:"2.0" },
+  { n:3, name:"Perimeter North", pan:"0100", tilt:"0000", zoom:"1.5" },
+  { n:4, name:"Loading Dock", pan:"FB00", tilt:"FFF5", zoom:"3.0" },
+  { n:5, name:"Lobby View", pan:"0050", tilt:"FFE0", zoom:"1.0" },
+  { n:6, name:"Rooftop Pan", pan:"0000", tilt:"0200", zoom:"1.0" },
+];
+
+function showToast(msg,ok=true) {
+  const t=document.getElementById('toast');
+  t.textContent=msg;
+  t.className=`toast ${ok?'ok':''} show`;
+  setTimeout(()=>t.classList.remove('show'),2500);
+}
+
+function renderPresets() {
+  const grid = document.getElementById('presetsGrid');
+  let html = PRESETS.map(p=>`
+    <div class="preset-card">
+      <div class="pc-hdr">
+        <div class="pc-num">${p.n}</div>
+        <div class="pc-acts">
+          <div class="pc-act" title="Edit" onclick="editPreset(${p.n})">✏</div>
+          <div class="pc-act" title="Delete" onclick="delPreset(${p.n})">🗑</div>
+        </div>
+      </div>
+      <input class="pc-name-inp" id="pname${p.n}" value="${p.name}">
+      <div class="pc-info">
+        <div class="pc-row"><span class="pc-key">Pan</span><span class="pc-val">${p.pan}</span></div>
+        <div class="pc-row"><span class="pc-key">Tilt</span><span class="pc-val">${p.tilt}</span></div>
+        <div class="pc-row"><span class="pc-key">Zoom</span><span class="pc-val">${p.zoom}×</span></div>
+      </div>
+      <div class="pc-btns">
+        <button class="pcbtn pcbtn-goto" onclick="callPreset(${p.n})">🎯 GO TO PRESET</button>
+        <button class="pcbtn pcbtn-save" onclick="savePreset(${p.n})">💾 UPDATE POSITION</button>
+      </div>
+    </div>
+  `).join('');
+  // Add 2 empty slots
+  for (let i=0;i<2;i++) html += `
+    <div class="preset-card empty" onclick="addPreset()">
+      <div class="add-preset">
+        <div class="add-icon">➕</div>
+        <div class="add-text">Add New Preset</div>
+      </div>
+    </div>`;
+  grid.innerHTML=html;
+}
+
+async function callPreset(n) {
+  const r = await api('/api/ptz/preset/call',{number:n});
+  showToast(`Preset ${n} recalled`);
+}
+
+async function savePreset(n) {
+  const r = await api('/api/ptz/preset/set',{number:n});
+  showToast(`Preset ${n} position updated`, r.ok!==false);
+}
+
+function editPreset(n){ const inp=document.getElementById(`pname${n}`); inp.focus(); inp.select(); }
+function delPreset(n){ if(confirm(`Delete preset ${n}?`)) { PRESETS.splice(PRESETS.findIndex(p=>p.n===n),1); renderPresets(); showToast(`Preset ${n} deleted`); } }
+function addPreset(){ const n=PRESETS.reduce((a,b)=>Math.max(a,b.n),0)+1; PRESETS.push({n,name:`Preset ${n}`,pan:"0000",tilt:"0000",zoom:"1.0"}); renderPresets(); showToast(`Preset ${n} added — navigate to position and save`); }
+
+// Tour
+let tourTimer=null, tourActive=false, tourIdx=0, tourPresets=[];
+function runTour(presets) {
+  stopTour();
+  tourActive=true; tourPresets=presets; tourIdx=0;
+  (function next(){
+    if(!tourActive||!tourPresets.length) return;
+    callPreset(tourPresets[tourIdx%tourPresets.length]);
+    tourIdx++;
+    tourTimer=setTimeout(next, 5000);
+  })();
+  showToast('Tour started');
+}
+function stopTour(){ tourActive=false; clearTimeout(tourTimer); showToast('Tour stopped'); }
+
+renderPresets();
+</script>
+</body>
+</html>

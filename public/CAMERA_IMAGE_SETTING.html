@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>PTZ COMMANDER — Image Settings</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Share+Tech+Mono&family=Orbitron:wght@600;700;900&display=swap');
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#080c10;--panel:#0d1117;--card:#111820;--border:#1e3a5f;
+  --blue:#00aaff;--cyan:#00ffee;--green:#00ff88;
+  --red:#ff2244;--orange:#ff8800;--yellow:#ffdd00;--purple:#aa55ff;
+  --muted:#4a6080;--text:#c8ddf0;
+  --glow-blue:0 0 20px rgba(0,170,255,.35);
+  --r:6px;--r2:12px;
+}
+html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'Rajdhani',sans-serif}
+.nav{height:52px;background:rgba(13,17,23,.97);border-bottom:2px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 20px;gap:8px;box-shadow:0 2px 24px rgba(0,170,255,.08)}
+.nav-logo{font-family:'Orbitron',sans-serif;font-size:17px;font-weight:900;color:var(--blue);letter-spacing:3px;display:flex;align-items:center;gap:8px}
+.nav-logo::before{content:'▣';font-size:20px;color:var(--cyan)}
+.nav-links{display:flex;gap:4px;flex:1;margin:0 20px}
+.nav-a{padding:6px 14px;border-radius:var(--r);text-decoration:none;color:var(--muted);font-size:13px;font-weight:600;letter-spacing:1px;text-transform:uppercase;transition:.2s;border:1px solid transparent}
+.nav-a:hover{color:var(--blue);border-color:var(--border);background:rgba(0,170,255,.06)}
+.nav-a.active{color:var(--bg);background:var(--blue);box-shadow:var(--glow-blue)}
+.container{max-width:1600px;margin:0 auto;padding:24px}
+.page-hdr{text-align:center;margin-bottom:32px}
+.page-title{font-family:'Orbitron',sans-serif;font-size:28px;font-weight:900;color:var(--blue);letter-spacing:4px;text-shadow:var(--glow-blue);margin-bottom:8px}
+.page-sub{font-size:14px;color:var(--muted);letter-spacing:2px;text-transform:uppercase}
+.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:20px}
+.panel{background:var(--panel);border-radius:var(--r2);padding:24px;border:1px solid var(--border);box-shadow:0 4px 32px rgba(0,0,0,.4);transition:.3s}
+.panel:hover{border-color:rgba(0,170,255,.25)}
+.p-title{font-family:'Orbitron',sans-serif;font-size:11px;font-weight:700;color:var(--blue);letter-spacing:2.5px;text-transform:uppercase;margin-bottom:20px;padding-bottom:12px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px}
+.p-title::before{content:'';width:3px;height:14px;background:var(--blue);border-radius:2px}
+
+/* Image slider control */
+.img-control{margin-bottom:18px}
+.ctrl-hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.ctrl-name{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted)}
+.ctrl-val-wrap{display:flex;align-items:center;gap:8px}
+.ctrl-val{font-family:'Share Tech Mono';font-size:16px;color:var(--cyan);min-width:28px;text-align:center}
+.ctrl-range{background:var(--card);border-radius:4px;padding:4px 8px;font-size:10px;color:var(--muted)}
+.img-slider{-webkit-appearance:none;width:100%;height:8px;border-radius:4px;outline:none;cursor:pointer;background:var(--card);border:1px solid var(--border)}
+.img-slider::-webkit-slider-thumb{-webkit-appearance:none;width:22px;height:22px;border-radius:50%;background:var(--cyan);cursor:pointer;border:2px solid var(--bg);box-shadow:0 0 12px rgba(0,255,238,.4);transition:.15s}
+.img-slider::-webkit-slider-thumb:hover{transform:scale(1.2);box-shadow:0 0 20px rgba(0,255,238,.6)}
+.tick-marks{display:flex;justify-content:space-between;margin-top:4px;font-size:10px;color:var(--border)}
+
+/* Radio groups */
+.radio-group{display:flex;flex-direction:column;gap:8px}
+.radio-opt{
+  background:var(--card);border:1.5px solid var(--border);border-radius:var(--r);
+  padding:12px 16px;cursor:pointer;transition:.2s;display:flex;align-items:center;gap:12px;
+}
+.radio-opt:hover{border-color:var(--blue);background:rgba(0,170,255,.06)}
+.radio-opt input{width:18px;height:18px;accent-color:var(--blue);cursor:pointer}
+.radio-opt label{font-size:13px;font-weight:600;cursor:pointer;flex:1;letter-spacing:.5px}
+.radio-opt.selected{border-color:var(--blue);background:rgba(0,170,255,.1)}
+
+/* Toggle switches */
+.toggle-row{
+  background:var(--card);border:1.5px solid var(--border);border-radius:var(--r);
+  padding:13px 16px;display:flex;justify-content:space-between;align-items:center;
+  margin-bottom:8px;cursor:pointer;transition:.2s;
+}
+.toggle-row:hover{border-color:rgba(0,170,255,.4);background:rgba(0,170,255,.04)}
+.toggle-row.on{border-color:var(--green);background:rgba(0,255,136,.06)}
+.toggle-label{font-size:13px;font-weight:600;letter-spacing:.5px;text-transform:uppercase}
+.toggle-sub{font-size:11px;color:var(--muted);margin-top:2px}
+.toggle-sw{
+  position:relative;width:52px;height:26px;border-radius:13px;
+  background:var(--border);transition:.3s;flex-shrink:0;
+  border:2px solid rgba(255,255,255,.06);
+}
+.toggle-sw.on{background:var(--green)}
+.toggle-sw::after{
+  content:'';position:absolute;width:18px;height:18px;border-radius:50%;
+  background:white;top:2px;left:2px;transition:.3s;box-shadow:0 2px 4px rgba(0,0,0,.4);
+}
+.toggle-sw.on::after{transform:translateX(26px)}
+
+/* Sub-controls (shown when parent enabled) */
+.sub-ctrl{background:var(--card);border:1px solid rgba(30,58,95,.5);border-radius:var(--r);padding:14px;margin-top:10px;display:none}
+.sub-ctrl.visible{display:block}
+
+/* Buttons */
+.btn-row{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:24px}
+.btn{padding:13px;border:none;border-radius:var(--r);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;cursor:pointer;transition:.2s;font-family:'Rajdhani',sans-serif;display:flex;align-items:center;justify-content:center;gap:6px}
+.btn:hover:not(:disabled){transform:translateY(-2px);filter:brightness(1.1)}
+.btn-blue{background:linear-gradient(135deg,var(--blue),#0077cc);color:var(--bg)}
+.btn-green{background:linear-gradient(135deg,var(--green),#00aa55);color:var(--bg)}
+.btn-outline{background:transparent;color:var(--text);border:1.5px solid var(--border)}
+.btn-outline:hover{border-color:var(--blue)!important;color:var(--blue)!important}
+
+/* Toast */
+.toast{
+  position:fixed;bottom:24px;right:24px;padding:14px 20px;border-radius:var(--r);
+  font-size:13px;font-weight:600;letter-spacing:.5px;z-index:999;
+  transform:translateY(100px);opacity:0;transition:.4s;
+  backdrop-filter:blur(10px);
+}
+.toast.ok{background:rgba(0,255,136,.15);border:1px solid var(--green);color:var(--green)}
+.toast.err{background:rgba(255,34,68,.15);border:1px solid var(--red);color:var(--red)}
+.toast.show{transform:translateY(0);opacity:1}
+
+/* Profile cards */
+.profile-list{display:flex;flex-direction:column;gap:8px}
+.prof-card{
+  background:var(--card);border:1.5px solid var(--border);border-radius:var(--r);
+  padding:12px 16px;display:flex;justify-content:space-between;align-items:center;
+  transition:.2s;
+}
+.prof-card:hover{border-color:rgba(0,170,255,.3)}
+.prof-name{font-size:14px;font-weight:600;letter-spacing:.5px}
+.prof-acts{display:flex;gap:6px}
+.prof-btn{padding:6px 12px;background:var(--panel);border:1px solid var(--border);border-radius:var(--r);color:var(--text);font-size:10px;font-weight:700;cursor:pointer;text-transform:uppercase;letter-spacing:1px;font-family:'Rajdhani',sans-serif;transition:.2s}
+.prof-btn:hover{background:var(--blue);color:var(--bg);border-color:var(--blue)}
+
+.select{background:var(--card);border:1.5px solid var(--border);border-radius:var(--r);color:var(--text);padding:10px 14px;font-size:13px;font-family:'Rajdhani',sans-serif;font-weight:600;width:100%;cursor:pointer;transition:.2s}
+.select:focus{outline:none;border-color:var(--blue)}
+
+@media(max-width:1100px){.grid{grid-template-columns:1fr}}
+@media(max-width:768px){.nav-links{display:none}.btn-row{grid-template-columns:1fr 1fr}}
+</style>
+</head>
+<body>
+
+ <link rel="stylesheet" href="css/style.css">
+<nav class="navbar">
+<div class="logo">📷 CAMERA SYSTEM CONTROL</div>
+  <div class="nav-links">
+    <a href="index.html"               class="nav-a">LIVE VIEW</a>
+    <a href="PTZ_CONTROLS.html"        class="nav-a">PTZ CONTROL</a>
+    <a href="CAMERA_IMAGE_SETTING.html"class="nav-a active">IMAGE</a>
+    <a href="RECORDING_SETTING.html"  class="nav-a">RECORDING</a>
+    <a href="PTZ_PRESET_SETTING.html" class="nav-a">PRESETS</a>
+    <a href="SYSTEM_INFORMATION.html" class="nav-a">SYSTEM</a>
+    <a href="config.html"             class="nav-a"></a>
+    <a href="records.html"            class="nav-a"> >RECORDS</a>
+  </div>
+</nav>
+
+<div class="container">
+<div class="page-hdr">
+  <h1 class="page-title">🎨 IMAGE SETTINGS</h1>
+  <p class="page-sub">HTTP-CGI Image Quality Control · Level 0–14</p>
+</div>
+
+<div class="grid">
+
+  <!-- BASIC IMAGE ADJUSTMENTS -->
+  <div class="panel">
+    <div class="p-title">BASIC ADJUSTMENTS</div>
+
+    <div class="img-control">
+      <div class="ctrl-hdr">
+        <span class="ctrl-name">BRIGHTNESS</span>
+        <div class="ctrl-val-wrap">
+          <span class="ctrl-val" id="brightVal">7</span>
+          <span class="ctrl-range">0–14</span>
+        </div>
+      </div>
+      <input type="range" class="img-slider" id="bright" min="0" max="14" value="7"
+        oninput="updateSlider('bright','brightVal',this.value,'BRIGHT')">
+      <div class="tick-marks"><span>0</span><span>7</span><span>14</span></div>
+    </div>
+
+    <div class="img-control">
+      <div class="ctrl-hdr">
+        <span class="ctrl-name">CONTRAST</span>
+        <div class="ctrl-val-wrap">
+          <span class="ctrl-val" id="contrastVal">7</span>
+          <span class="ctrl-range">0–14</span>
+        </div>
+      </div>
+      <input type="range" class="img-slider" id="contrast" min="0" max="14" value="7"
+        oninput="updateSlider('contrast','contrastVal',this.value,'CONTRAST')">
+      <div class="tick-marks"><span>FLAT</span><span>NORMAL</span><span>HIGH</span></div>
+    </div>
+
+    <div class="img-control">
+      <div class="ctrl-hdr">
+        <span class="ctrl-name">SATURATION</span>
+        <div class="ctrl-val-wrap">
+          <span class="ctrl-val" id="satVal">7</span>
+          <span class="ctrl-range">0–14</span>
+        </div>
+      </div>
+      <input type="range" class="img-slider" id="sat" min="0" max="14" value="7"
+        oninput="updateSlider('sat','satVal',this.value,'SATURATION')">
+      <div class="tick-marks"><span>B&W</span><span>NORMAL</span><span>VIVID</span></div>
+    </div>
+
+    <div class="img-control">
+      <div class="ctrl-hdr">
+        <span class="ctrl-name">SHARPNESS</span>
+        <div class="ctrl-val-wrap">
+          <span class="ctrl-val" id="sharpVal">7</span>
+          <span class="ctrl-range">0–14</span>
+        </div>
+      </div>
+      <input type="range" class="img-slider" id="sharp" min="0" max="14" value="7"
+        oninput="updateSlider('sharp','sharpVal',this.value,'SHARPNESS')">
+      <div class="tick-marks"><span>SOFT</span><span>NORMAL</span><span>SHARP</span></div>
+    </div>
+
+    <div class="img-control">
+      <div class="ctrl-hdr">
+        <span class="ctrl-name">HUE</span>
+        <div class="ctrl-val-wrap">
+          <span class="ctrl-val" id="hueVal">7</span>
+          <span class="ctrl-range">0–14</span>
+        </div>
+      </div>
+      <input type="range" class="img-slider" id="hue" min="0" max="14" value="7"
+        oninput="updateSlider('hue','hueVal',this.value,'HUE')">
+      <div class="tick-marks"><span>COOL</span><span>NEUTRAL</span><span>WARM</span></div>
+    </div>
+  </div>
+
+  <!-- IMAGE ORIENTATION -->
+  <div class="panel">
+    <div class="p-title">IMAGE ORIENTATION</div>
+
+    <div class="toggle-row" id="flipRow" onclick="toggleOrientation('FLIP','flipRow','flipSw')">
+      <div>
+        <div class="toggle-label">VERTICAL FLIP</div>
+        <div class="toggle-sub">Mirror image vertically</div>
+      </div>
+      <div class="toggle-sw" id="flipSw"></div>
+    </div>
+
+    <div class="toggle-row" id="mirrorRow" onclick="toggleOrientation('MIRROR','mirrorRow','mirrorSw')">
+      <div>
+        <div class="toggle-label">HORIZONTAL MIRROR</div>
+        <div class="toggle-sub">Mirror image horizontally</div>
+      </div>
+      <div class="toggle-sw" id="mirrorSw"></div>
+    </div>
+
+    <div class="p-title" style="margin-top:24px">DEFAULT SETTINGS</div>
+    <button class="btn btn-outline" onclick="resetImageDefaults()" style="width:100%;border:1.5px solid var(--border)">
+      🔄 RESTORE IMAGE DEFAULTS
+    </button>
+
+    <div class="p-title" style="margin-top:24px">IMAGE PROFILES</div>
+    <div class="profile-list">
+      <div class="prof-card">
+        <div>
+          <div class="prof-name">🌅 Outdoor Daylight</div>
+          <div style="font-size:11px;color:var(--muted)">High brightness, natural colors</div>
+        </div>
+        <div class="prof-acts">
+          <button class="prof-btn" onclick="loadProfile('outdoor')">LOAD</button>
+          <button class="prof-btn">DEL</button>
+        </div>
+      </div>
+      <div class="prof-card">
+        <div>
+          <div class="prof-name">🌃 Night Vision</div>
+          <div style="font-size:11px;color:var(--muted)">High brightness, low saturation</div>
+        </div>
+        <div class="prof-acts">
+          <button class="prof-btn" onclick="loadProfile('night')">LOAD</button>
+          <button class="prof-btn">DEL</button>
+        </div>
+      </div>
+      <div class="prof-card">
+        <div>
+          <div class="prof-name">🏢 Indoor Standard</div>
+          <div style="font-size:11px;color:var(--muted)">Balanced for office lighting</div>
+        </div>
+        <div class="prof-acts">
+          <button class="prof-btn" onclick="loadProfile('indoor')">LOAD</button>
+          <button class="prof-btn">DEL</button>
+        </div>
+      </div>
+    </div>
+    <button class="btn btn-green" onclick="saveProfile()" style="width:100%;margin-top:10px">+ SAVE CURRENT AS PROFILE</button>
+  </div>
+
+</div>
+
+<div class="btn-row">
+  <button class="btn btn-blue" onclick="applyAll()">✅ APPLY ALL</button>
+  <button class="btn btn-green" onclick="saveToCamera()">💾 SAVE TO CAMERA</button>
+  <button class="btn btn-outline" onclick="resetAll()">🔄 RESET TO DEFAULT</button>
+</div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<script>
+const api = async (path,body) => {
+  const r = await fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).catch(()=>null);
+  return r?.json().catch(()=>({})) ?? {};
+};
+
+const ORIENT_STATE = { FLIP:false, MIRROR:false };
+
+function showToast(msg, ok=true) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = `toast ${ok?'ok':'err'} show`;
+  setTimeout(()=>t.classList.remove('show'),2500);
+}
+
+let imgDebounce = {};
+function updateSlider(id, valId, val, mode) {
+  document.getElementById(valId).textContent = val;
+  clearTimeout(imgDebounce[mode]);
+  imgDebounce[mode] = setTimeout(async () => {
+    const r = await api('/api/image/set', { mode, level: +val });
+    if (r.ok) showToast(`${mode} set to ${val}`);
+    else showToast(`Failed: ${r.error||'camera offline'}`, false);
+  }, 500);
+}
+
+function toggleOrientation(mode, rowId, swId) {
+  ORIENT_STATE[mode] = !ORIENT_STATE[mode];
+  const row = document.getElementById(rowId);
+  const sw = document.getElementById(swId);
+  row.classList.toggle('on', ORIENT_STATE[mode]);
+  sw.classList.toggle('on', ORIENT_STATE[mode]);
+  api('/api/image/orientation', { mode, state: ORIENT_STATE[mode] })
+    .then(r => showToast(`${mode}: ${ORIENT_STATE[mode]?'ON':'OFF'}`, r.ok));
+}
+
+async function resetImageDefaults() {
+  const r = await api('/api/image/default', {});
+  if (r.ok) {
+    // Reset all sliders to 7
+    ['bright','contrast','sat','sharp','hue'].forEach(id => {
+      const el = document.getElementById(id);
+      if(el) el.value=7;
+    });
+    ['brightVal','contrastVal','satVal','sharpVal','hueVal'].forEach(id => {
+      const el = document.getElementById(id);
+      if(el) el.textContent='7';
+    });
+    showToast('Image defaults restored');
+  } else showToast('Failed to restore defaults', false);
+}
+
+function applyAll() {
+  const modes = [
+    { id:'bright', label:'brightVal', mode:'BRIGHT' },
+    { id:'contrast', label:'contrastVal', mode:'CONTRAST' },
+    { id:'sat', label:'satVal', mode:'SATURATION' },
+    { id:'sharp', label:'sharpVal', mode:'SHARPNESS' },
+    { id:'hue', label:'hueVal', mode:'HUE' },
+  ];
+  Promise.all(modes.map(m => api('/api/image/set',{ mode:m.mode, level:+document.getElementById(m.id).value })))
+    .then(() => showToast('All image settings applied'));
+}
+
+function saveToCamera() { applyAll(); showToast('Settings saved to camera'); }
+function resetAll() {
+  ['bright','contrast','sat','sharp','hue'].forEach(id => {
+    document.getElementById(id).value = 7;
+  });
+  ['brightVal','contrastVal','satVal','sharpVal','hueVal'].forEach(id => {
+    document.getElementById(id).textContent = '7';
+  });
+  applyAll();
+  showToast('Reset to defaults');
+}
+
+const PROFILES = {
+  outdoor: { bright:10, contrast:8, sat:9, sharp:8, hue:7 },
+  night:   { bright:12, contrast:6, sat:3, sharp:9, hue:7 },
+  indoor:  { bright:7,  contrast:7, sat:7, sharp:6, hue:7 },
+};
+
+function loadProfile(name) {
+  const p = PROFILES[name];
+  if (!p) return;
+  document.getElementById('bright').value = p.bright;
+  document.getElementById('brightVal').textContent = p.bright;
+  document.getElementById('contrast').value = p.contrast;
+  document.getElementById('contrastVal').textContent = p.contrast;
+  document.getElementById('sat').value = p.sat;
+  document.getElementById('satVal').textContent = p.sat;
+  document.getElementById('sharp').value = p.sharp;
+  document.getElementById('sharpVal').textContent = p.sharp;
+  document.getElementById('hue').value = p.hue;
+  document.getElementById('hueVal').textContent = p.hue;
+  applyAll();
+  showToast(`Profile "${name}" loaded`);
+}
+
+function saveProfile() {
+  showToast('Profile saved (UI only — backend storage TBD)');
+}
+</script>
+</body>
+</html>

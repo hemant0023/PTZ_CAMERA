@@ -4,16 +4,40 @@
   <title>Live Camera</title>
   <link rel="stylesheet" href="css/style.css">
 </head>
+<style>   
+.nav{height:52px;background:rgba(13,17,23,.97);border-bottom:2px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 20px;gap:8px;box-shadow:0 2px 24px rgba(0,170,255,.08)}
+.nav-logo{font-family:'Orbitron',sans-serif;font-size:17px;font-weight:900;color:var(--blue);letter-spacing:3px;display:flex;align-items:center;gap:8px}
+.nav-logo::before{content:'▣';font-size:20px;color:var(--cyan)}
+.nav-links{display:flex;gap:4px;flex:1;margin:0 20px}
+.nav-a{padding:6px 14px;border-radius:var(--r);text-decoration:none;color:var(--muted);font-size:13px;font-weight:600;letter-spacing:1px;text-transform:uppercase;transition:.2s;border:1px solid transparent}
+.nav-a:hover{color:var(--blue);border-color:var(--border);background:rgba(0,170,255,.06)}
+.nav-a.active{color:var(--bg);background:var(--blue);box-shadow:var(--glow-blue)}
+</style>
 
 <body>
 
-<nav class="navbar">
+<!-- <nav class="navbar">
   <div class="logo">📷 CAMERA SYSTEM CONTROL</div>
   <ul>
     <li class="active">HOME</li>
     <li><a href="config.html">CONFIGURATION</a></li>
     <li><a href="records.html">RECORDS</a></li>
   </ul>
+</nav> -->
+
+
+<nav class="navbar">
+<div class="logo">📷 CAMERA SYSTEM CONTROL</div>
+  <div class="nav-links">
+    <a href="index.html"               class="nav-a" active >LIVE VIEW</a>
+    <a href="PTZ_CONTROLS.html"        class="nav-a">PTZ CONTROL</a>
+    <a href="CAMERA_IMAGE_SETTING.html"class="nav-a ">IMAGE</a>
+    <a href="RECORDING_SETTING.html"  class="nav-a">RECORDING</a>
+    <a href="PTZ_PRESET_SETTING.html" class="nav-a">PRESETS</a>
+    <a href="SYSTEM_INFORMATION.html" class="nav-a">SYSTEM</a>
+    <a href="config.html"             class="nav-a"></a>
+    <a href="records.html"            class="nav-a"> >RECORDS</a>
+  </div>
 </nav>
 
 <div class="container live-layout">

@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>PTZ COMMANDER — Recording</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Share+Tech+Mono&family=Orbitron:wght@600;700;900&display=swap');
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#080c10;--panel:#0d1117;--card:#111820;--border:#1e3a5f;
+  --blue:#00aaff;--cyan:#00ffee;--green:#00ff88;
+  --red:#ff2244;--orange:#ff8800;--yellow:#ffdd00;
+  --muted:#4a6080;--text:#c8ddf0;
+  --glow-blue:0 0 20px rgba(0,170,255,.35);
+  --glow-red:0 0 20px rgba(255,34,68,.35);
+  --r:6px;--r2:12px;
+}
+html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'Rajdhani',sans-serif}
+.nav{height:52px;background:rgba(13,17,23,.97);border-bottom:2px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 20px;gap:8px;box-shadow:0 2px 24px rgba(0,170,255,.08)}
+.nav-logo{font-family:'Orbitron',sans-serif;font-size:17px;font-weight:900;color:var(--blue);letter-spacing:3px;display:flex;align-items:center;gap:8px}
+.nav-logo::before{content:'▣';font-size:20px;color:var(--cyan)}
+.nav-links{display:flex;gap:4px;flex:1;margin:0 20px}
+.nav-a{padding:6px 14px;border-radius:var(--r);text-decoration:none;color:var(--muted);font-size:13px;font-weight:600;letter-spacing:1px;text-transform:uppercase;transition:.2s;border:1px solid transparent}
+.nav-a:hover{color:var(--blue);border-color:var(--border);background:rgba(0,170,255,.06)}
+.nav-a.active{color:var(--bg);background:var(--blue);box-shadow:var(--glow-blue)}
+.container{max-width:1600px;margin:0 auto;padding:24px}
+.page-hdr{text-align:center;margin-bottom:32px}
+.page-title{font-family:'Orbitron',sans-serif;font-size:28px;font-weight:900;color:var(--blue);letter-spacing:4px;text-shadow:var(--glow-blue);margin-bottom:8px}
+.page-sub{font-size:14px;color:var(--muted);letter-spacing:2px;text-transform:uppercase}
+
+/* Main recording control bar */
+.rec-ctrl-bar{
+  background:var(--panel);border-radius:var(--r2);padding:20px 24px;
+  border:2px solid var(--border);margin-bottom:20px;
+  display:grid;grid-template-columns:auto 1fr auto auto;gap:16px;align-items:center;
+  box-shadow:0 4px 32px rgba(0,0,0,.4);transition:.3s;
+}
+.rec-ctrl-bar.active{border-color:var(--red);box-shadow:var(--glow-red)}
+.rec-indicator{display:flex;align-items:center;gap:10px}
+.rec-dot{width:18px;height:18px;border-radius:50%;background:var(--muted);transition:.3s}
+.rec-dot.on{background:var(--red);animation:recblink .8s infinite;box-shadow:0 0 14px var(--red)}
+@keyframes recblink{0%,100%{opacity:1}50%{opacity:.4}}
+.rec-label{font-family:'Orbitron',sans-serif;font-size:13px;font-weight:700;letter-spacing:3px;color:var(--muted);transition:.3s}
+.rec-label.on{color:var(--red)}
+.rec-timer-large{font-family:'Share Tech Mono';font-size:36px;font-weight:700;color:var(--red);text-shadow:var(--glow-red);letter-spacing:4px}
+.inp{background:var(--card);border:1.5px solid var(--border);border-radius:var(--r);color:var(--text);padding:10px 14px;font-size:14px;font-family:'Rajdhani',sans-serif;transition:.2s;width:100%}
+.inp:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 2px rgba(0,170,255,.15)}
+.inp::placeholder{color:var(--muted)}
+.btn{padding:12px 20px;border:none;border-radius:var(--r);font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;cursor:pointer;transition:.2s;font-family:'Rajdhani',sans-serif;display:flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap}
+.btn:hover:not(:disabled){transform:translateY(-2px);filter:brightness(1.1)}
+.btn:disabled{opacity:.35;cursor:not-allowed}
+.btn-red{background:linear-gradient(135deg,var(--red),#aa0022);color:#fff;min-width:120px}
+.btn-blue{background:linear-gradient(135deg,var(--blue),#0077cc);color:var(--bg);min-width:120px}
+.btn-outline{background:transparent;color:var(--text);border:1.5px solid var(--border)}
+.btn-outline:hover:not(:disabled){border-color:var(--blue)!important;color:var(--blue)!important}
+.btn-green{background:linear-gradient(135deg,var(--green),#00aa55);color:var(--bg)}
+
+/* Settings grid */
+.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:20px;margin-bottom:20px}
+.panel{background:var(--panel);border-radius:var(--r2);padding:22px;border:1px solid var(--border);box-shadow:0 4px 32px rgba(0,0,0,.4)}
+.p-title{font-family:'Orbitron',sans-serif;font-size:11px;font-weight:700;color:var(--blue);letter-spacing:2.5px;text-transform:uppercase;margin-bottom:18px;padding-bottom:12px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px}
+.p-title::before{content:'';width:3px;height:14px;background:var(--blue);border-radius:2px}
+.form-group{margin-bottom:16px}
+.form-label{display:block;margin-bottom:7px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted)}
+.select{background:var(--card);border:1.5px solid var(--border);border-radius:var(--r);color:var(--text);padding:10px 14px;font-size:13px;font-family:'Rajdhani',sans-serif;font-weight:600;width:100%;cursor:pointer;transition:.2s}
+.select:focus{outline:none;border-color:var(--blue)}
+
+/* Radio options */
+.radio-group{display:flex;flex-direction:column;gap:8px}
+.radio-opt{background:var(--card);border:1.5px solid var(--border);border-radius:var(--r);padding:11px 14px;cursor:pointer;transition:.2s;display:flex;align-items:center;gap:10px}
+.radio-opt:hover{border-color:rgba(0,170,255,.4);background:rgba(0,170,255,.04)}
+.radio-opt input[type="radio"]{width:16px;height:16px;accent-color:var(--blue);cursor:pointer}
+.radio-opt label{font-size:13px;font-weight:600;cursor:pointer;flex:1}
+
+/* Toggle */
+.trow{background:var(--card);border:1.5px solid var(--border);border-radius:var(--r);padding:11px 14px;display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;cursor:pointer;transition:.2s}
+.trow:hover{border-color:rgba(0,170,255,.3)}
+.trow.on{border-color:var(--green);background:rgba(0,255,136,.05)}
+.tlabel{font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+.tsw{position:relative;width:46px;height:24px;border-radius:12px;background:var(--border);transition:.3s;flex-shrink:0}
+.tsw.on{background:var(--green)}
+.tsw::after{content:'';position:absolute;width:16px;height:16px;border-radius:50%;background:#fff;top:4px;left:4px;transition:.3s;box-shadow:0 1px 3px rgba(0,0,0,.4)}
+.tsw.on::after{transform:translateX(22px)}
+
+/* Storage bar */
+.storage-wrap{background:var(--card);border-radius:var(--r);padding:14px;border:1px solid var(--border);margin-bottom:14px}
+.storage-bar{height:10px;background:var(--panel);border-radius:5px;overflow:hidden;margin-bottom:8px;border:1px solid var(--border)}
+.storage-fill{height:100%;background:linear-gradient(90deg,var(--green),var(--yellow),var(--red));width:38%;transition:.5s}
+.storage-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;text-align:center}
+.ss-val{font-family:'Share Tech Mono';font-size:15px;color:var(--blue)}
+.ss-lbl{font-size:9px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-top:3px}
+
+/* Recording Library */
+.lib-panel{background:var(--panel);border-radius:var(--r2);padding:22px;border:1px solid var(--border);box-shadow:0 4px 32px rgba(0,0,0,.4)}
+.lib-list{display:flex;flex-direction:column;gap:8px;max-height:400px;overflow-y:auto;padding-right:4px}
+.lib-list::-webkit-scrollbar{width:6px}
+.lib-list::-webkit-scrollbar-track{background:var(--panel)}
+.lib-list::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+.lib-list::-webkit-scrollbar-thumb:hover{background:var(--blue)}
+.lib-item{
+  background:var(--card);border:1.5px solid var(--border);border-radius:var(--r);
+  padding:12px 16px;display:grid;grid-template-columns:auto 1fr auto auto;gap:14px;
+  align-items:center;transition:.2s;
+}
+.lib-item:hover{border-color:rgba(0,170,255,.3);background:rgba(0,170,255,.04)}
+.lib-icon{width:40px;height:40px;background:rgba(0,170,255,.1);border-radius:var(--r);display:flex;align-items:center;justify-content:center;font-size:20px;border:1px solid var(--border)}
+.lib-info{}
+.lib-name{font-size:14px;font-weight:600;margin-bottom:3px}
+.lib-meta{font-size:11px;color:var(--muted);font-family:'Share Tech Mono'}
+.lib-size{font-family:'Share Tech Mono';font-size:13px;color:var(--blue);white-space:nowrap}
+.lib-acts{display:flex;gap:6px}
+.lib-btn{padding:6px 10px;background:var(--panel);border:1px solid var(--border);border-radius:var(--r);color:var(--text);font-size:10px;font-weight:700;cursor:pointer;text-transform:uppercase;letter-spacing:1px;font-family:'Rajdhani',sans-serif;transition:.15s}
+.lib-btn:hover{background:var(--blue);color:var(--bg);border-color:var(--blue)}
+.lib-btn.del:hover{background:var(--red);border-color:var(--red)}
+.empty-state{text-align:center;padding:40px;color:var(--muted)}
+.empty-icon{font-size:48px;opacity:.3;display:block;margin-bottom:12px}
+
+@media(max-width:1100px){.grid{grid-template-columns:1fr}}
+@media(max-width:768px){.nav-links{display:none}.rec-ctrl-bar{grid-template-columns:1fr;text-align:center}}
+</style>
+</head>
+<body>
+<nav class="nav">
+  <div class="nav-logo">PTZ COMMANDER</div>
+  <div class="nav-links">
+    <a href="index.html" class="nav-a">LIVE VIEW</a>
+    <a href="ptz-controls.html" class="nav-a">PTZ CONTROL</a>
+    <a href="camera-settings.html" class="nav-a">IMAGE</a>
+    <a href="recording-settings.html" class="nav-a active">RECORDING</a>
+    <a href="presets.html" class="nav-a">PRESETS</a>
+    <a href="system.html" class="nav-a">SYSTEM</a>
+  </div>
+</nav>
+
+<div class="container">
+<div class="page-hdr">
+  <h1 class="page-title">⏺ RECORDING CENTER</h1>
+  <p class="page-sub">Video Recording Configuration & Library</p>
+</div>
+
+<!-- RECORDING CONTROL BAR -->
+<div class="rec-ctrl-bar" id="recBar">
+  <div class="rec-indicator">
+    <div class="rec-dot" id="recDot"></div>
+    <span class="rec-label" id="recLabel">IDLE</span>
+  </div>
+  <input class="inp" id="recFilename" placeholder="Filename (leave empty for timestamp)">
+  <div class="rec-timer-large" id="recTimer">00:00:00</div>
+  <div style="display:flex;gap:8px">
+    <button class="btn btn-blue" id="recStartBtn" onclick="startRec()">▶ START REC</button>
+    <button class="btn btn-red" id="recStopBtn" onclick="stopRec()" disabled>■ STOP</button>
+  </div>
+</div>
+
+<div class="grid">
+
+  <!-- VIDEO QUALITY -->
+  <div class="panel">
+    <div class="p-title">VIDEO QUALITY</div>
+    <div class="form-group">
+      <label class="form-label">RESOLUTION</label>
+      <select class="select" id="resolution">
+        <option value="3840x2160">4K Ultra HD (3840×2160)</option>
+        <option value="2560x1440">2K QHD (2560×1440)</option>
+        <option value="1920x1080" selected>Full HD (1920×1080)</option>
+        <option value="1280x720">HD Ready (1280×720)</option>
+        <option value="640x480">SD (640×480)</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">FRAME RATE</label>
+      <select class="select" id="fps">
+        <option value="60">60 FPS — Smooth</option>
+        <option value="30" selected>30 FPS — Standard</option>
+        <option value="24">24 FPS — Cinematic</option>
+        <option value="15">15 FPS — Bandwidth Saver</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">VIDEO CODEC</label>
+      <select class="select" id="codec">
+        <option value="h265">H.265 / HEVC — Best Compression</option>
+        <option value="h264" selected>H.264 / AVC — Compatible</option>
+        <option value="copy">Copy (no transcode) — Fastest</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">BITRATE</label>
+      <select class="select" id="bitrate">
+        <option value="20M">20 Mbps — Ultra Quality</option>
+        <option value="10M">10 Mbps — High Quality</option>
+        <option value="6M">6 Mbps — Balanced</option>
+        <option value="4M" selected>4 Mbps — Standard</option>
+        <option value="2M">2 Mbps — Low Bandwidth</option>
+        <option value="1M">1 Mbps — Minimal</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- RECORDING OPTIONS -->
+  <div class="panel">
+    <div class="p-title">RECORDING MODE</div>
+    <div class="radio-group" style="margin-bottom:18px">
+      <div class="radio-opt">
+        <input type="radio" name="recMode" value="rtsp" id="mRTSP" checked>
+        <label for="mRTSP">📡 RTSP Stream (Camera Source)</label>
+      </div>
+      <div class="radio-opt">
+        <input type="radio" name="recMode" value="local" id="mLocal">
+        <label for="mLocal">💻 Local HLS Stream</label>
+      </div>
+    </div>
+
+    <div class="p-title">OPTIONS</div>
+    <div class="trow" id="audioTrow" onclick="toggleRow('audioTrow','audioSw')">
+      <div class="tlabel">INCLUDE AUDIO</div>
+      <div class="tsw on" id="audioSw"></div>
+    </div>
+    <div class="trow" id="tsmpTrow" onclick="toggleRow('tsmpTrow','tsmpSw')">
+      <div class="tlabel">TIMESTAMP OVERLAY</div>
+      <div class="tsw on" id="tsmpSw"></div>
+    </div>
+    <div class="trow" id="splitTrow" onclick="toggleRow('splitTrow','splitSw')">
+      <div class="tlabel">AUTO SPLIT FILES</div>
+      <div class="tsw" id="splitSw"></div>
+    </div>
+    <div class="trow" id="motionTrow" onclick="toggleRow('motionTrow','motionSw')">
+      <div class="tlabel">MOTION TRIGGER</div>
+      <div class="tsw" id="motionSw"></div>
+    </div>
+
+    <div class="p-title" style="margin-top:18px">STORAGE</div>
+    <div class="storage-wrap">
+      <div class="storage-bar">
+        <div class="storage-fill" id="storageFill" style="width:38%"></div>
+      </div>
+      <div class="storage-stats">
+        <div><div class="ss-val" id="storUsed">48.5 GB</div><div class="ss-lbl">USED</div></div>
+        <div><div class="ss-val" id="storFree">79.5 GB</div><div class="ss-lbl">FREE</div></div>
+        <div><div class="ss-val" id="storEta">~84h</div><div class="ss-lbl">ESTIMATED</div></div>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">WHEN STORAGE FULL</label>
+      <select class="select">
+        <option value="overwrite" selected>Overwrite Oldest Files</option>
+        <option value="stop">Stop Recording</option>
+        <option value="notify">Send Alert Only</option>
+      </select>
+    </div>
+  </div>
+
+</div>
+
+<!-- RECORDING LIBRARY -->
+<div class="lib-panel">
+  <div class="p-title" style="margin-bottom:16px">
+    RECORDING LIBRARY
+    <span style="margin-left:auto;font-family:'Share Tech Mono';font-size:12px;color:var(--muted)">
+      <span id="libCount">0</span> RECORDINGS
+    </span>
+  </div>
+  <div class="lib-list" id="libList">
+    <div class="empty-state">
+      <span class="empty-icon">📂</span>
+      <div>No recordings yet</div>
+    </div>
+  </div>
+  <div style="margin-top:14px;display:flex;gap:10px;justify-content:flex-end">
+    <button class="btn btn-outline" onclick="loadLibrary()">🔄 REFRESH</button>
+    <button class="btn btn-outline">📥 EXPORT ALL</button>
+  </div>
+</div>
+</div>
+
+<script>
+const api = async (path,body) => {
+  const r = await fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).catch(()=>null);
+  return r?.json().catch(()=>({})) ?? {};
+};
+
+let recActive=false, recStart, recInterval;
+
+async function startRec() {
+  const file = document.getElementById('recFilename').value.trim();
+  const r = await api('/api/rec/start',{filename:file});
+  if (r.ok) {
+    recActive=true; recStart=Date.now();
+    document.getElementById('recStartBtn').disabled=true;
+    document.getElementById('recStopBtn').disabled=false;
+    document.getElementById('recBar').classList.add('active');
+    document.getElementById('recDot').classList.add('on');
+    document.getElementById('recLabel').classList.add('on');
+    document.getElementById('recLabel').textContent='RECORDING';
+    recInterval = setInterval(updateTimer,1000);
+  }
+}
+
+async function stopRec() {
+  const r = await api('/api/rec/stop',{});
+  if (r.ok) {
+    recActive=false; clearInterval(recInterval);
+    document.getElementById('recStartBtn').disabled=false;
+    document.getElementById('recStopBtn').disabled=true;
+    document.getElementById('recBar').classList.remove('active');
+    document.getElementById('recDot').classList.remove('on');
+    document.getElementById('recLabel').classList.remove('on');
+    document.getElementById('recLabel').textContent='IDLE';
+    document.getElementById('recTimer').textContent='00:00:00';
+    loadLibrary();
+  }
+}
+
+function updateTimer() {
+  const s=Math.floor((Date.now()-recStart)/1000);
+  const h=Math.floor(s/3600),m=Math.floor((s%3600)/60),sec=s%60;
+  const p=x=>String(x).padStart(2,'0');
+  document.getElementById('recTimer').textContent=`${p(h)}:${p(m)}:${p(sec)}`;
+}
+
+const TSTATE={};
+function toggleRow(rowId, swId) {
+  const on = !TSTATE[rowId];
+  TSTATE[rowId]=on;
+  document.getElementById(rowId).classList.toggle('on',on);
+  document.getElementById(swId).classList.toggle('on',on);
+}
+// Init default ON states
+['audioTrow','tsmpTrow'].forEach(id=>{ TSTATE[id]=true; });
+
+async function loadLibrary() {
+  try {
+    const r = await fetch('/api/recordings').then(x=>x.json());
+    const list = document.getElementById('libList');
+    const count = document.getElementById('libCount');
+    count.textContent = r.count || 0;
+    if (!r.files || r.files.length===0) {
+      list.innerHTML='<div class="empty-state"><span class="empty-icon">📂</span><div>No recordings yet</div></div>';
+      return;
+    }
+    list.innerHTML = r.files.map(f=>`
+      <div class="lib-item">
+        <div class="lib-icon">🎥</div>
+        <div class="lib-info">
+          <div class="lib-name">${f.name}</div>
+          <div class="lib-meta">${new Date(f.created).toLocaleString()}</div>
+        </div>
+        <div class="lib-size">${f.sizeMB} MB</div>
+        <div class="lib-acts">
+          <a class="lib-btn" href="${f.url}" download>⬇ DL</a>
+          <button class="lib-btn del" onclick="deleteRec('${f.name}')">🗑 DEL</button>
+        </div>
+      </div>
+    `).join('');
+  } catch(e) {}
+}
+
+function deleteRec(name) {
+  if (confirm(`Delete ${name}?`)) {
+    fetch(`/api/recordings/${name}`,{method:'DELETE'}).then(()=>loadLibrary()).catch(()=>{});
+  }
+}
+
+loadLibrary();
+setInterval(loadLibrary, 10000);
+</script>
+</body>
+</html>
