@@ -2,31 +2,386 @@
 <html>
 <head>
   <title>Live Camera</title>
+  
   <link rel="stylesheet" href="css/style.css">
-</head>
-<style>   
-.nav{height:52px;background:rgba(13,17,23,.97);border-bottom:2px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 20px;gap:8px;box-shadow:0 2px 24px rgba(0,170,255,.08)}
-.nav-logo{font-family:'Orbitron',sans-serif;font-size:17px;font-weight:900;color:var(--blue);letter-spacing:3px;display:flex;align-items:center;gap:8px}
-.nav-logo::before{content:'▣';font-size:20px;color:var(--cyan)}
-.nav-links{display:flex;gap:4px;flex:1;margin:0 20px}
-.nav-a{padding:6px 14px;border-radius:var(--r);text-decoration:none;color:var(--muted);font-size:13px;font-weight:600;letter-spacing:1px;text-transform:uppercase;transition:.2s;border:1px solid transparent}
-.nav-a:hover{color:var(--blue);border-color:var(--border);background:rgba(0,170,255,.06)}
-.nav-a.active{color:var(--bg);background:var(--blue);box-shadow:var(--glow-blue)}
+
+<style>
+
+/* ================= GLOBAL ================= */
+
+/* body{
+margin:0px;
+font-family:Segoe UI, sans-serif;
+background:#82ecf0;
+color:rgb(247, 247, 247);
+overflow:hidden;
+}
+
+.layout{
+display:flex;
+height:calc(100vh - 55px);
+}
+
+
+.navbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #020617;
+  color: white;
+  padding: 15px 24px;
+}
+
+.navbar .active {
+  color: #38bdf8;
+  font-weight: bold;
+}
+
+.navbar ul {
+  list-style: none;
+  display: flex;
+  gap: 24px;
+}
+
+.navbar a {
+  color: #94a3b8;
+  text-decoration: none;
+}
+
+.navbar li {
+  color: #cbd5e1;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.active {
+  color: #38bdf8;
+  font-weight: bold;
+}
+
+.form-group {
+  margin-bottom: 22px;
+}
+
+label {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.pipe {
+  opacity: 0.6;
+} */
+
+
+
+/* ================= LEFT PTZ SIDEBAR ================= */
+
+.ptz-sidebar{
+
+width:300px;
+background: #040a27;
+padding:25px;
+display:flex;
+flex-direction:column;
+gap:15px;
+border-left:10px solid  #182386;
+border-right:10px solid #182386;
+border-radius:15px;
+transition:.3s;
+overflow:auto;
+margin-top: 1px;
+position:relative;
+outline: none; 
+ 
+ /* margin-bottom: 10px; 
+ margin:auto; */
+   /* position:relative;
+  align-items: center;
+  justify-content: center;
+   align-items: center; 
+  justify-content: center;
+  */
+
+ 
+}
+
+/* collapse button */
+
+.toggle-btn{
+
+position:absolute;
+left:280px;
+top:70px;
+background:#2563eb;
+border:none;
+color:white;
+padding:6px 10px;
+cursor:pointer;
+border-radius:6px;
+
+}
+
+/* ================= VIDEO AREA ================= */
+
+
+.video-area{
+width:100%;
+order:1;
+flex:1;
+display:flex;
+flex-direction:column;
+align-items:center;
+justify-content:center;
+padding:20px;
+
+}
+
+
+.video-panel{
+  
+width:100%; 
+max-width:1900px;   /* 🔥  3840px;   allow full 4K  900px;  1500px; */
+height: auto;
+background: black;
+aspect-ratio:16/9;
+background:black;
+border-radius:25px;
+overflow:hidden;
+box-shadow:0 10px 30px rgba(0,0,0,.5);
+}
+
+video{
+width:100%;
+height:100%;
+object-fit:contain;
+display: block;
+}
+
+/* ================= PTZ JOYSTICK ================= */
+
+.section-title{
+font-size:20px;
+color:#94a3b8;
+margin-bottom:8px;
+}
+
+/* joystick */
+
+.joystick{
+width:170px;
+height:160px;
+margin:auto;
+position:relative;
+}
+
+.joystick button{
+position:absolute;
+width:50px;
+height:50px;
+border-radius:50%;
+border:none;
+background:#1e293b;
+color:white;
+font-size:18px;
+cursor:pointer;
+}
+
+.joystick button:active{
+background:#2563eb;
+}
+
+/* directions */
+
+.up{top:0;left:60px;}
+.down{bottom:0;left:60px;}
+.left{left:0;top:60px;}
+.right{right:0;top:60px;}
+
+.upleft{top:5px;left:5px;}
+.upright{top:5px;right:5px;}
+.downleft{bottom:5px;left:5px;}
+.downright{bottom:5px;right:5px;}
+
+.center{
+top:60px;
+left:60px;
+background:#2563eb;
+}
+
+/* ================= ZOOM CONTROL ================= */
+
+.zoom-box{
+display:flex;
+flex-direction:column;
+gap:10px;
+}
+
+.zoom-buttons{
+display:flex;
+gap:8px;
+}
+
+.zoom-buttons button{
+flex:1;
+padding:10px;
+border:none;
+background:#2563eb;
+color:white;
+border-radius:6px;
+cursor:pointer;
+}
+
+#digitalZoom{
+width:100%;
+}
+
+/* ================= PRESET KEYPAD ================= */
+
+.preset-grid{
+display:grid;
+grid-template-columns:repeat(3,1fr);
+gap:10px;
+}
+
+.preset-grid button{
+height:60px;
+font-size:20px;
+border:none;
+border-radius:10px;
+background:#1e293b;
+color:white;
+cursor:pointer;
+}
+
+.preset-grid button:active{
+background:#16a34a;
+}
+
+
+
+
+/* ===== INFO BAR ===== */
+.info-bar {
+  margin-top: 12px;
+  padding: 10px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  background: #020617;
+  color: white;
+  border-radius: 8px;
+  font-size: 18px;
+}
+
+.information_area{
+ height:100px;
+/* width:500px;
+  position:relative; */
+  position:relative;
+  margin:auto;
+  align-items: center;
+  justify-content: center;
+  border-radius:100px;
+  background: #040a27;
+  gap: 100px;
+  border-radius: 50px;
+  margin-top: 20px;
+  margin-bottom: 10px;
+  padding: 10px;
+  display: flex;
+  outline: none;
+  font-size: 15px;
+  color: rgb(243, 240, 240);
+}
+
+/* ===== FILENAME INPUT ===== */
+.filename-box{
+
+  width:500px;
+  margin-top: 10px;
+  margin:auto;
+  display: flex;
+  flex-direction: column;
+  color: rgb(243, 240, 240);
+}
+
+.filename-box label {
+  font-weight: 600;
+}
+
+.filename-box input {
+
+  padding: 15px;
+  font-size: 15px;
+  border-radius: 6px;
+  border: 1px solid #cbd5f5;
+  outline: none;
+
+}
+
+/* ===== CONTROLS ===== */
+.controls {
+
+  margin-top: 20px;
+  display: flex;
+  justify-content: center;
+  gap: 15px;
+}
+
+.controls button {
+
+  margin-top: 20px;
+  padding: 12px 28px;
+  border-radius: 10px;
+  border: none;
+  cursor: pointer;
+  font-size: 20px;
+  color: rgb(243, 240, 240);
+}
+
+.controls button:disabled{
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.primary{
+  background: #22c55e;
+  color: white;
+}
+
+.danger{
+  background: #ef4444;
+  color: white;
+}
+
+
+/* ================= RESPONSIVE ================= */
+
+@media(max-width:900px){
+
+.ptz-sidebar{
+position:absolute;
+z-index:5;
+height:100%;
+}
+
+.toggle-btn{
+left:10px;
+}
+
+}
+
 </style>
+
+</head>
 
 <body>
 
+
+
 <!-- <nav class="navbar">
-  <div class="logo">📷 CAMERA SYSTEM CONTROL</div>
-  <ul>
-    <li class="active">HOME</li>
-    <li><a href="config.html">CONFIGURATION</a></li>
-    <li><a href="records.html">RECORDS</a></li>
-  </ul>
-</nav> -->
-
-
-<nav class="navbar">
 <div class="logo">📷 CAMERA SYSTEM CONTROL</div>
   <div class="nav-links">
     <a href="index.html"               class="nav-a" active >LIVE VIEW</a>
@@ -38,57 +393,160 @@
     <a href="config.html"             class="nav-a"></a>
     <a href="records.html"            class="nav-a"> >RECORDS</a>
   </div>
+</nav> -->
+
+
+<nav class="navbar">
+  <div >📷 CAMERA SYSTEM CONTROL</div>
+  <ul>
+    <li class="active">HOME</li>
+    <li><a href="config.html">CONFIGURATION</a></li>
+    <li><a href="records.html">RECORDS</a></li>
+    <li><a href="SYSTEM_INFORMATION.html" >SYSTEM</a></li>
+    <li><a href="PTZ_CONTROLS.html"       >PTZ CONTROL</a></li>
+    <li></li><a href="CAMERA_IMAGE_SETTING.html">IMAGE</a></li>
+  </ul>
 </nav>
 
-<div class="container live-layout">
 
-  <!-- LIVE VIDEO PANEL
-   <div class="video-panel">
-    <img id="liveFeed" />
-  </div> -->
- <!--  -->
- <!--  -->
-    <!-- controls  -->
-    <!-- preload="auto"   -->
-  <!-- LIVE VIDEO PANEL -->
-  <div class="video-panel">
-   <video
-  id="liveFeed"
-  autoplay
-  muted
-  playsinline
-  preload="auto" 
- controls
->
-</video>
-  </div>
+<div class="layout">
+
+<!-- ================= PTZ SIDEBAR ================= -->
+
+<div class="ptz-sidebar" id="sidebar">
+
+<div class="section-title">PTZ JOYSTICK</div>
+<div class="zoom-speed"> 
+<div class="section-title">PAN SPEED</div>
+<input id="panSpeed" type="range" min="1" max="24" value="12">
+<span id="panSpeedVal">12</span>
+</div>
+
+<div class="section-title">TILT SPEED</div>
+<div class="zoom-speed"> 
+<input id="tiltSpeed" type="range" min="1" max="20" value="10">
+<span id="tiltSpeedVal">10</span>
+</div>
 
 
+<div class="joystick">
+<button class="upleft"   data-dir="upleft">↖</button>
+<button class="up"       data-dir="up">↑</button>
+<button class="upright"  data-dir="upright">↗</button>
 
-  <!-- STATUS + TIMER BAR -->
+<button class="left"      data-dir="left">←</button>
+<button class="center">●</button>
+<button class="right"    data-dir="right">→</button>
+
+<button class="downleft" data-dir="downleft">↙</button>
+<button class="down" data-dir="down">↓</button>
+<button class="downright" data-dir="downright">↘</button>
+</div>
+
+<div class="section-title">OPTICAL SPEED</div>
+<div class="zoom-speed">
+<input id="opticalZoomspeed" type="range" min="1" max="5" step="0.1" value="1">
+<span id="opticalZoomspeedVal">4</span>
+</div>
+
+<div class="section-title">OPTICAL ZOOM</div>
+<div class="zoom-box">
+
+<div class="zoom-buttons">
+<button id="zoomIn">+</button>
+<!-- <button id="zoomStop">■</button> -->
+<button id="zoomOut">−</button>
+</div>
+
+<div class="section-title">DIGITAL SPEED</div>
+<div class="zoom-speed">
+<input id="digitalZoomspeed" type="range" min="1" max="5" step="0.1" value="1">
+<span id="digitalZoomspeedVal">4</span>
+</div>
+
+
+<div class="section-title">DIGITAL ZOOM</div>
+<div class="zoom-buttons">
+<button id="zoomIn">+</button>
+<!-- <button id="zoomStop">■</button> -->
+<button id="zoomOut">−</button>
+</div>
+</div>
+
+
+<div class="section-title">IMAGE CONTROL</div>
+<div class="image-controls">
+
+<label>Brightness</label>
+<input id="brightness" type="range" min="0" max="200" value="100">
+<span id="brightnessVal">12</span>
+<label>Contrast</label>
+<input id="contrast" type="range" min="0" max="200" value="100">
+<span id="contrastVal">12</span>
+<label>Saturation</label>
+<input id="saturation" type="range" min="0" max="200" value="100">
+<span id="saturationVal">12</span>
+<!-- <button id="backlight" class="backlight-btn">Backlight</button> -->
+
+</div>
+
+
+<div class="section-title">PRESETS</div>
+
+<div class="preset-grid">
+<button data-preset="1">1</button>
+<button data-preset="2">2</button>
+<button data-preset="3">3</button>
+<button data-preset="4">4</button>
+<button data-preset="5">5</button>
+<button data-preset="6">6</button>
+<button data-preset="7">7</button>
+<button data-preset="8">8</button>
+<button data-preset="9">9</button>
+</div>
+
+</div>
+
+<!-- ================= VIDEO ================= -->
+
+<div class="video-area">
+
+<div class="video-panel">
+<video id="liveFeed" autoplay muted playsinline></video>
+</div>
+
+<div class="information_area">
+
   <div class="info-bar">
     <span class="label">STATUS</span>
     <span id="status" class="badge idle">IDLE</span>
     <span class="pipe">|</span>
-      <span class="label">TIME</span>
+    <span class="label">TIME</span>
     <span id="timer">00:00:00</span>
   </div>
 
-  <!-- FILE NAME INPUT -->
-   <div class="filename-box">
-    <label for="filename">FILE NAME</label>
-    <input id="filename" placeholder="ENTER FILE NAME" autocomplete="off">
-  </div>
 
-  <!-- CONTROLS -->
+   <div class="filename-box">
+    <label class="label">FILE NAME</label>
+    <input id="filename" placeholder="ENTER FILE NAME" autocomplete="off">
+   </div>
+
  <div class="controls">
   <button id="startBtn"  type="button" class="primary">Start</button>
   <button id="pauseBtn"  type="button" disabled>Pause</button>
-  <button id="resumeBtn" type="button" disabled>Resume</button>
-  <button id="stopBtn"   type="button" class="danger" disabled>Stop</button>
+  <button id="resumeBtn" type="button" disabled> Resume </button>
+  <button id="stopBtn"   type="button" class="danger" disabled> Stop </button>
+  </div>
+
+  </div>
+
+  </div>
+
 </div>
-  <div id="errorBox" class="error-box hidden"></div>
-</div>
+
+
+<button class="toggle-btn" onclick="toggleSidebar()">☰</button>
+
 
 <script src="js/app.js"></script>
 </body>

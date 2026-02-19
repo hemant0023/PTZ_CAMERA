@@ -359,12 +359,11 @@ paths:
     runOnNotReady: echo "[MediaMTX] Stream lost"
 `;
 
-  fs.writeFileSync(
-    CAMERA_CONFIGURATION.mediamtx.configFile,
+  fs.writeFileSync(CAMERA_CONFIGURATION.mediamtx.configFile,
     yaml.trim() + "\n"
   );
 
-  console.log("📝 mediamtx.yml written (industrial config)");
+  console.log("📝mediamtx.yml written");
 }
 
 // ============================================================================
@@ -441,7 +440,7 @@ async function CHECK_CAMERA_ONLINE(){
 
 }
 
-setInterval(CHECK_CAMERA_ONLINE, 10000);
+setInterval(CHECK_CAMERA_ONLINE, 5000);
 
 
 
@@ -1788,43 +1787,46 @@ function RUN_FFMPEG_ARGUMENT_COMMAND({ outputPath = null, enableLive = false }){
      "-avoid_negative_ts", "make_zero",
      "-use_wallclock_as_timestamps", "1",
      "-flush_packets", "1",
+     "-f", "mp4",
+    "-movflags", "+faststart",
+     outputPath
     // "-f", "mp4",
     // "-movflags", "frag_keyframe+empty_moov+default_base_moof",
    //  "-frag_duration", "100000",
     // "pipe:1"
 ];
 
- if(enableLive && outputPath){
+//  if(enableLive && outputPath){
 
-    console.log("✅ FFMPEG  enableLive && outputPath",outputPath);
-    args.push(
-      "-f", "tee",
-      `[f=mp4:movflags=+faststart]${outputPath}|` + `[f=mp4:movflags=frag_keyframe+empty_moov+default_base_moof:frag_duration=100000]pipe:1`
-    );
+//     console.log("✅ FFMPEG  enableLive && outputPath",outputPath);
+//     args.push(
+//       "-f", "tee",
+//       `[f=mp4:movflags=+faststart]${outputPath}|` + `[f=mp4:movflags=frag_keyframe+empty_moov+default_base_moof:frag_duration=100000]pipe:1`
+//     );
 
-  }else if(enableLive){
+//   }else if(enableLive){
    
-    console.log("✅ FFMPEG  enableLive ONLY ");
+//     console.log("✅ FFMPEG  enableLive ONLY ");
 
-    args.push(
-    "-f", "mp4",
-    "-movflags", "frag_keyframe+empty_moov+default_base_moof",
-    "-frag_duration", "100000",   // 100ms fragments
-    "pipe:1"
-    );
+//     args.push(
+//     "-f", "mp4",
+//     "-movflags", "frag_keyframe+empty_moov+default_base_moof",
+//     "-frag_duration", "100000",   // 100ms fragments
+//     "pipe:1"
+//     );
 
-  }else if(outputPath){
+//   }else if(outputPath){
     
-    console.log("✅ FFMPEG  outputPath ONLY");
-    args.push(
-    "-f", "mp4",
-    "-movflags", "+faststart",
-    outputPath
-    );
+//     console.log("✅ FFMPEG  outputPath ONLY");
+//     args.push(
+//     "-f", "mp4",
+//     "-movflags", "+faststart",
+//     outputPath
+//     );
 
-  }
+  //}
 
-  }else{
+ }else{
     
     FFMPEG_ERROR.result = false;
     FFMPEG_ERROR.reason = "NO_OUTPUT_DEFINED";
@@ -1842,113 +1844,113 @@ function RUN_FFMPEG_ARGUMENT_COMMAND({ outputPath = null, enableLive = false }){
   }
    
 
-  if(enableLive && WESOCKET_CONNECTED_FLAG){   //📡LIVE STREAM
-     console.log("ffmpegProcess LIVE STREAM",WESOCKET_CONNECTED_FLAG); 
+//   if(enableLive && WESOCKET_CONNECTED_FLAG){   //📡LIVE STREAM
+//      console.log("ffmpegProcess LIVE STREAM",WESOCKET_CONNECTED_FLAG); 
    
-     mp4Header = null;
-    initReady = false;
-    liveClients.forEach(ws => {ws.isInitSent = false;});
-    initBuffer = Buffer.alloc(0);
+//      mp4Header = null;
+//     initReady = false;
+//     liveClients.forEach(ws => {ws.isInitSent = false;});
+//     initBuffer = Buffer.alloc(0);
 
-      ffmpegProcess.stdout.on("data", chunk => {
-       //console.log(" chunk Size:", chunk.length, "bytes"); 
-      // console.log(" chunk", chunk); 
+//       ffmpegProcess.stdout.on("data", chunk => {
+//        //console.log(" chunk Size:", chunk.length, "bytes"); 
+//       // console.log(" chunk", chunk); 
 
-       // if (!mp4Header && WESOCKET_SEND_DATA_CONNECTED_FLAG ){
-      //    mp4Header = chunk;
-      //    console.log("📦 MP4 header captured (size):", mp4Header.length);
-      //    console.log("📦 MP4 header captured",mp4Header);
-      // }
+//        // if (!mp4Header && WESOCKET_SEND_DATA_CONNECTED_FLAG ){
+//       //    mp4Header = chunk;
+//       //    console.log("📦 MP4 header captured (size):", mp4Header.length);
+//       //    console.log("📦 MP4 header captured",mp4Header);
+//       // }
 
-  if (!initReady && !mp4Header) {
-         //console.log("chunk Size:", chunk.length, "bytes"); 
-        // console.log(" chunk", chunk); 
-         initBuffer = Buffer.concat([initBuffer, chunk]);
-         const moovEnd = findMoovEnd(initBuffer);
-        console.log("📦moovEnd  ",moovEnd);
-      if ( moovEnd){
-      mp4Header = initBuffer.slice(0, moovEnd);
-      initReady = true;
-      console.log("📦 MP4 header captured (size):", mp4Header.length);
-      console.log("📦 MP4 header captured",mp4Header);
-      chunk = initBuffer.slice(moovEnd);  // remaining bytes are media data
-      console.log("📦init left chunk (size)   ",chunk.length);
-      console.log("📦init left chunk    ",chunk);
-      initBuffer = null;
-    } else {
-     console.log("📦 MP4 moov header pending to moov end ");
-     return;
-    }
-  }
+//   if (!initReady && !mp4Header) {
+//          //console.log("chunk Size:", chunk.length, "bytes"); 
+//         // console.log(" chunk", chunk); 
+//          initBuffer = Buffer.concat([initBuffer, chunk]);
+//          const moovEnd = findMoovEnd(initBuffer);
+//         console.log("📦moovEnd  ",moovEnd);
+//       if ( moovEnd){
+//       mp4Header = initBuffer.slice(0, moovEnd);
+//       initReady = true;
+//       console.log("📦 MP4 header captured (size):", mp4Header.length);
+//       console.log("📦 MP4 header captured",mp4Header);
+//       chunk = initBuffer.slice(moovEnd);  // remaining bytes are media data
+//       console.log("📦init left chunk (size)   ",chunk.length);
+//       console.log("📦init left chunk    ",chunk);
+//       initBuffer = null;
+//     } else {
+//      console.log("📦 MP4 moov header pending to moov end ");
+//      return;
+//     }
+//   }
  
- let index = 0;
-  liveClients.forEach(ws => { 
+//  let index = 0;
+//   liveClients.forEach(ws => { 
 
-    index++;
-    const info = {
-      clientNo: index,
-      readyState: getReadyStateName(ws.readyState) || "unknown",
-      bufferedAmount: ws.bufferedAmount,
-      ip: ws._socket?.remoteAddress || "unknown",
-      port: ws._socket?.remotePort || "unknown"
-    };
+//     index++;
+//     const info = {
+//       clientNo: index,
+//       readyState: getReadyStateName(ws.readyState) || "unknown",
+//       bufferedAmount: ws.bufferedAmount,
+//       ip: ws._socket?.remoteAddress || "unknown",
+//       port: ws._socket?.remotePort || "unknown"
+//     };
 
-     if (!ws.isInitSent && mp4Header){
-          ws.send(mp4Header);
-          ws.isInitSent = true;
-          ws.waitForFirstKeyframe = true; // 🔑
-          console.log("📦 MP4 Init segment sent (late)");
-          //return;
-        } 
+//      if (!ws.isInitSent && mp4Header){
+//           ws.send(mp4Header);
+//           ws.isInitSent = true;
+//           ws.waitForFirstKeyframe = true; // 🔑
+//           console.log("📦 MP4 Init segment sent (late)");
+//           //return;
+//         } 
 
-     if( ws.isInitSent && WESOCKET_CONNECTED_FLAG && WESOCKET_SEND_DATA_CONNECTED_FLAG ){
+//      if( ws.isInitSent && WESOCKET_CONNECTED_FLAG && WESOCKET_SEND_DATA_CONNECTED_FLAG ){
       
-    if ( ws.readyState === WebSocket.OPEN){// && ws.bufferedAmount < MAX_BUFFER
-          if(chunk.length > 0){
-           ws.send(chunk); }
-        // console.log("🧩 Client Info:", info);
-      // console.log(`✅ Data sent to client #${index} (${chunk.length} bytes)`); 
+//     if ( ws.readyState === WebSocket.OPEN){// && ws.bufferedAmount < MAX_BUFFER
+//           if(chunk.length > 0){
+//            ws.send(chunk); }
+//         // console.log("🧩 Client Info:", info);
+//       // console.log(`✅ Data sent to client #${index} (${chunk.length} bytes)`); 
 
-    }else{
-      console.log(`⚠️ Data NOT sent to client = ${index}  DELETE CLIENT buffer #${ws.bufferedAmount} <  #${MAX_BUFFER}` );
-      console.log("🧩 Client Info:", info);
-      deadClients.push(ws);
-      liveClients.delete(ws);
-      console.log("AVAILAVLE CLIENT ",liveClients.size,deadClients.length,WESOCKET_CONNECTED_FLAG);
-    }
+//     }else{
+//       console.log(`⚠️ Data NOT sent to client = ${index}  DELETE CLIENT buffer #${ws.bufferedAmount} <  #${MAX_BUFFER}` );
+//       console.log("🧩 Client Info:", info);
+//       deadClients.push(ws);
+//       liveClients.delete(ws);
+//       console.log("AVAILAVLE CLIENT ",liveClients.size,deadClients.length,WESOCKET_CONNECTED_FLAG);
+//     }
 
-  }else{ 
-             console.warn(`⚠️ ffmpegProcess Data NOT sent to client #${index} chunck length `,chunk.length);
-              console.log("🧩 Client Info:", info); 
-              // deadClients.push(ws);
-              //liveClients.delete(ws);
-            console.log("AVAILAVLE CLIENT ",liveClients.size,deadClients.length,"WESOCKET_CONNECTED_FLAG :",WESOCKET_CONNECTED_FLAG, "WESOCKET_SEND_DATA_CONNECTED_FLAG :" ,WESOCKET_SEND_DATA_CONNECTED_FLAG);
-          } 
-  });
+//   }else{ 
+//              console.warn(`⚠️ ffmpegProcess Data NOT sent to client #${index} chunck length `,chunk.length);
+//               console.log("🧩 Client Info:", info); 
+//               // deadClients.push(ws);
+//               //liveClients.delete(ws);
+//             console.log("AVAILAVLE CLIENT ",liveClients.size,deadClients.length,"WESOCKET_CONNECTED_FLAG :",WESOCKET_CONNECTED_FLAG, "WESOCKET_SEND_DATA_CONNECTED_FLAG :" ,WESOCKET_SEND_DATA_CONNECTED_FLAG);
+//           } 
+//   });
 
 
-   //&& deadClients >= 1
-  if(WESOCKET_CONNECTED_FLAG && liveClients.size == 0 && deadClients.length >= 1){
+//    //&& deadClients >= 1
+//   if(WESOCKET_CONNECTED_FLAG && liveClients.size == 0 && deadClients.length >= 1){
 
-         console.log("NO CLIENT AVAILABLE IN WEBSOCKET CLEARING WEBSOCKET ");
-         deadClients = [];
+//          console.log("NO CLIENT AVAILABLE IN WEBSOCKET CLEARING WEBSOCKET ");
+//          deadClients = [];
 
-     for(const ws of liveClients){
-         console.log("wss CLOSING WS CLIENT IN RESET ...",liveClients.length);
+//      for(const ws of liveClients){
+//          console.log("wss CLOSING WS CLIENT IN RESET ...",liveClients.length);
 
-        if(ws.readyState === ws.OPEN){
-          ws.close(1000, "STOP EVENT RESET"); // SERVER ERROR
-          WESOCKET_CONNECTED_FLAG = false;
-          if(ffmpegProcess){
-             killFFmpeg("🛑 NO LIVE CLIENTS → STOPPING LIVE FFMPEG");
-            }
-         }
-      }
-   }    
+//         if(ws.readyState === ws.OPEN){
+//           ws.close(1000, "STOP EVENT RESET"); // SERVER ERROR
+//           WESOCKET_CONNECTED_FLAG = false;
+//           if(ffmpegProcess){
+//              killFFmpeg("🛑 NO LIVE CLIENTS → STOPPING LIVE FFMPEG");
+//             }
+//          }
+//       }
+//    }    
 
-   });
+//    });
 
-  }
+//   }
 
 
 
@@ -2071,20 +2073,20 @@ app.post("/start", async (req, res) => {
 
    
        RECORDING_STATE.active = true;
-       WESOCKET_SEND_DATA_CONNECTED_FLAG = false;
-     
-     if(ffmpegProcess && liveClients.size >= 1  && WESOCKET_CONNECTED_FLAG){
-      console.log("🔄 Transitioning from live-only to live + recording  Notify clients to expect reconnection");
-      notifyLiveClientsclear();
-    }
+       
+      // WESOCKET_SEND_DATA_CONNECTED_FLAG = false;
+    //  if(ffmpegProcess && liveClients.size >= 1  && WESOCKET_CONNECTED_FLAG){
+    //   console.log("🔄 Transitioning from live-only to live + recording  Notify clients to expect reconnection");
+    //   notifyLiveClientsclear();
+    // }
     
       if (ffmpegProcess && !ffmpegStopping){
       await killFFmpeg("CLEANUP ON NEW RECORDING START");
-    }
-      await new Promise(r => setTimeout(r, 1000));
-  
+     await new Promise(r => setTimeout(r, 1000));
+  }
+     
 
- if (!ffmpegProcess == null && ffmpegStopping != false ){
+ if (ffmpegProcess != null  ){
     console.log("CAMERA_ALREADY_RUNNING : ",ffmpegStopping);
     return res.status(500).json({ error: "CAMERA_ALREADY_RUNNING" });
 
@@ -2156,8 +2158,8 @@ app.post("/pause", async (req, res) => {
     RECORDING_STATE.status = "PAUSED";
 
      if(ffmpegProcess && ffmpegStopping == false ){
-          killFFmpeg("PAUSED_STATE STOP FFmpeg...");
-          console.log("⏸ RECORDING PAUSED at", RECORDING_STATE.pausedAt);
+         killFFmpeg("PAUSED_STATE STOP FFmpeg...");
+        console.log("⏸ RECORDING PAUSED at", RECORDING_STATE.pausedAt);
 
       return res.json({
       success: true,
@@ -2207,12 +2209,12 @@ app.post("/resume", (req, res) => {
    RECORDING_STATE.pausedAt = null; // ✅ VERY IMPORTANT
    RECORDING_STATE.active = true;
 
-    if( liveClients.size >= 1  && WESOCKET_CONNECTED_FLAG){
-      console.log("🔄 Transitioning from live-only to live + recording Notify clients to expect reconnection");
-      notifyLiveClientsclear();
-    }
+    // if( liveClients.size >= 1  && WESOCKET_CONNECTED_FLAG){
+    //   console.log("🔄 Transitioning from live-only to live + recording Notify clients to expect reconnection");
+    //   notifyLiveClientsclear();
+    // }
 
-    WESOCKET_SEND_DATA_CONNECTED_FLAG = true;
+   // WESOCKET_SEND_DATA_CONNECTED_FLAG = true;
     RUN_FFMPEG_ARGUMENT_COMMAND({ enableLive: LIVE_STREAM_ENABLED,outputPath: segmentPath});
     setTimeout(() => { 
      if (!FFMPEG_ERROR.result){
@@ -2483,16 +2485,16 @@ app.post("/stop", async (req, res) => {
   
 
 
-    if (WESOCKET_CONNECTED_FLAG && LIVE_STREAM_ENABLED && liveClients.size >= 1) {
-        console.log("🎥 Restarting live stream...");
-        ALLOWED_LIVE_FLAG = true;
-        // notifyLiveClientsReset();
-        for (const ws of liveClients) {
-         if(ws.readyState === ws.OPEN) {
-          ws.close(1000, "STOP EVENT"); // SERVER ERROR
-            }
-          }
-        }
+    // if (WESOCKET_CONNECTED_FLAG && LIVE_STREAM_ENABLED && liveClients.size >= 1) {
+    //     console.log("🎥 Restarting live stream...");
+    //     ALLOWED_LIVE_FLAG = true;
+    //     // notifyLiveClientsReset();
+    //     for (const ws of liveClients) {
+    //      if(ws.readyState === ws.OPEN) {
+    //       ws.close(1000, "STOP EVENT"); // SERVER ERROR
+    //         }
+    //       }
+    //     }
 
   } catch (err) {
     console.error("STOP FAILED Error type:", err.type ,"Error message:", err.message);
@@ -2525,19 +2527,19 @@ app.post("/stop", async (req, res) => {
     RECORDING_STATE.timer_state = "OFF";
     RECORDING_STATE.audio_mute_flag = false;
 
-    // Restart live stream if needed
-    if (WESOCKET_CONNECTED_FLAG && LIVE_STREAM_ENABLED && liveClients.size >= 1) {
-      console.log("🎥 Restarting live stream after error...");
-      ALLOWED_LIVE_FLAG = true;
-      mp4Header = null;
-      for (const ws of liveClients) {
-           console.log("wss CLOSING WS CLIENT IN STOP ERROR ...",liveClients.length);
-       if (ws.readyState === ws.OPEN) {
-          ws.close(1000, "STOP ERROR EVENT"); // SERVER ERROR
-       }
-      }
-     // notifyLiveClientsReset();
-    }
+    // // Restart live stream if needed
+    // if (WESOCKET_CONNECTED_FLAG && LIVE_STREAM_ENABLED && liveClients.size >= 1) {
+    //   console.log("🎥 Restarting live stream after error...");
+    //   ALLOWED_LIVE_FLAG = true;
+    //   mp4Header = null;
+    //   for (const ws of liveClients) {
+    //        console.log("wss CLOSING WS CLIENT IN STOP ERROR ...",liveClients.length);
+    //    if (ws.readyState === ws.OPEN) {
+    //       ws.close(1000, "STOP ERROR EVENT"); // SERVER ERROR
+    //    }
+    //   }
+    //  // notifyLiveClientsReset();
+    // }
 
     res.status(500).json({
       error: "STOP_FAILED",
@@ -2556,12 +2558,12 @@ app.post("/reset", async (req, res) => {
    
  try {
 
-  for (const ws of liveClients){
-      console.log("wss CLOSING WS CLIENT IN RESET ...",liveClients.length);
-       if (ws.readyState === ws.OPEN) {
-          ws.close(1000, "STOP EVENT RESET"); // SERVER ERROR
-       }
-      }
+  // for (const ws of liveClients){
+  //     console.log("wss CLOSING WS CLIENT IN RESET ...",liveClients.length);
+  //      if (ws.readyState === ws.OPEN) {
+  //         ws.close(1000, "STOP EVENT RESET"); // SERVER ERROR
+  //      }
+  //     }
 
    if (ffmpegProcess  && ffmpegStopping == false){
          killFFmpeg("⛔PAUSE STOP RECORDING");
@@ -2601,11 +2603,11 @@ app.post("/reset", async (req, res) => {
     RECORDING_STATE.timer_state = "OFF";
     RECORDING_STATE.audio_mute_flag = false;
 
-    if (WESOCKET_CONNECTED_FLAG && LIVE_STREAM_ENABLED && liveClients.size >= 1) {
-        console.log("RE STARTED LIVE_STREAM_ENABLED");
-        ALLOWED_LIVE_FLAG = true;
-         notifyLiveClientsReset();
-      }
+    // if (WESOCKET_CONNECTED_FLAG && LIVE_STREAM_ENABLED && liveClients.size >= 1) {
+    //     console.log("RE STARTED LIVE_STREAM_ENABLED");
+    //     ALLOWED_LIVE_FLAG = true;
+    //      notifyLiveClientsReset();
+    //   }
        
  res.json({
         success: true,
