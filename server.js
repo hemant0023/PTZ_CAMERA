@@ -95,7 +95,7 @@ const CAMERA_CONFIGURATION = {
   camera_network: {
 
     CAMERA_ONLINE:false,
-    ip:           "192.168.100.88",   // ← your camera IP
+    ip:           "192.168.29.54",   // ← your camera IP
     subnet_mask:  "255.255.255.0",
     gate_way:     "192.168.100.1",
     DNS_Address:  "8.8.8.8",
@@ -501,7 +501,7 @@ app.get("/api/ptz/stop", async (req, res) => {
 
   const ps = CAMERA_CONFIGURATION.PTZ_STATE.defaultPanSpeed;
   const ts = CAMERA_CONFIGURATION.PTZ_STATE.defaultTiltSpeed;
-  const result = await cgiRequest(`/cgi-bin/ptzctrl.cgi?ptzcmd&PTZSTOP&${ps}&${ts}`);
+  const result = await cgiRequest(`/cgi-bin/ptzctrl.cgi?ptzcmd&ptzstop&${ps}&${ts}`);
   CAMERA_CONFIGURATION.PTZ_STATE.moving = false;
   broadcastStatus();
  res.json({ success: result.ok ,data : result.data});
@@ -519,16 +519,51 @@ app.get("/api/ptz/move", async (req, res) => {
   const ps  = Math.min(24, Math.max(1, parseInt(req.query.ps  || CAMERA_CONFIGURATION.PTZ_STATE.defaultPanSpeed)));
   const ts  = Math.min(20, Math.max(1, parseInt(req.query.ts  || CAMERA_CONFIGURATION.PTZ_STATE.defaultTiltSpeed)));
 
-  const VALID = ["UP","DOWN","LEFT","RIGHT","LEFTUP","RIGHTUP","LEFTDOWN","RIGHTDOWN","PTZSTOP"];
+  const VALID = ["UP","DOWN","LEFT","RIGHT","LEFTUP","RIGHTUP","LEFTDOWN","RIGHTDOWN","PTZSTOP","HOME"];
   if (!VALID.includes(dir)) return res.status(400).json({ error: "Invalid direction /api/ptz/move" });
-
-  const ep  = dir === "PTZSTOP"? `/cgi-bin/ptzctrl.cgi?ptzcmd&PTZSTOP&${ps}&${ts}` : `/cgi-bin/ptzctrl.cgi?ptzcmd&${dir}&${ps}&${ts}`;
-
+ let result =null;
+  if(dir === "HOME"){
+     result = await cgiRequest(`/cgi-bin/ptzctrl.cgi?ptzcmd&${dir.toLowerCase()}`);
+  }else{
+  const ep  = dir === "PTZSTOP"? `/cgi-bin/ptzctrl.cgi?ptzcmd&ptzstop&${ps}&${ts}` : `/cgi-bin/ptzctrl.cgi?ptzcmd&${dir.toLowerCase()}&${ps}&${ts}`;
+  result = await cgiRequest(ep ,`PTZ : ${dir}` );
   CAMERA_CONFIGURATION.PTZ_STATE.moving = dir !== "PTZSTOP";
-  const result = await cgiRequest(ep ,`PTZ : ${dir}` );
+  }
   broadcastStatus();
   res.json({ success: result.ok,data : result.data,direction: dir, pan_speed: ps, tilt_speed: ts });
 }); 
+
+//default vaule 
+// bright="7"
+// saturation="4"
+// contrast="7"
+// sharpness="6"
+// hue="7"
+// vinorm="60"
+// flip="0"
+// mirror="0"
+app.get("/api/ptz/image_setting", async (req, res) => {
+
+   const mode = (req.query.mode).toUpperCase();
+   const levelInt = Math.max(0, Math.min(14, parseInt(req.query.level)));
+  const validModes = ['BRIGHT', 'SATURATION', 'CONTRAST', 'SHARPNESS', 'HUE',`FLIP`,`MIRROR`,'DEFAULT'];
+ 
+  if (!validModes.includes(mode.toUpperCase())) {
+    return res.status(400).json({ error: 'Invalid mode' });
+  }
+  let result = null;
+  if(mode === "DEFAULT"){
+     result = await cgiRequest(`/cgi-bin/param.cgi?get_image_default_conf`);
+  }else if(mode === "FLIP" || mode === "MIRROR"){
+    result = await cgiRequest(`/cgi-bin/param.cgi?post_image_value&${mode.toLowerCase()}&${levelInt > 0 ? 1 : 0}`);
+  }else{
+   result = await cgiRequest(`/cgi-bin/param.cgi?post_image_value&${mode.toLowerCase()}&${levelInt}`);
+  }
+
+  res.json({ success: result.ok,data : result.data });
+
+
+});
 
 // ============================================================================
 // ROUTE: DIRECT ABSOLUTE / RELATIVE POSITION
@@ -545,7 +580,7 @@ app.post("/api/ptz/position", async (req, res) => {
   if (!["ABS","REL"].includes(mode.toUpperCase()))
     return res.status(400).json({ error: "mode must be ABS or REL" });
 
-  const ep = `/cgi-bin/ptzctrl.cgi?ptzcmd&${mode.toUpperCase()}&${ps}&${ts}&${pan}&${tilt}`;
+  const ep = `/cgi-bin/ptzctrl.cgi?ptzcmd&${mode.toLowerCase()}&${ps}&${ts}&${pan}&${tilt}`;
   const result = await cgiRequest(ep);
   CAMERA_CONFIGURATION.PTZ_STATE.moving = false;
   res.json({ success: result.ok, data : result.data,mode, pan, tilt });
@@ -562,8 +597,43 @@ app.get("/api/ptz/zoom", async (req, res) => {
   const zs     = Math.min(7, Math.max(1, parseInt(req.query.zs || CAMERA_CONFIGURATION.PTZ_STATE.defaultZoomSpeed)));
   const VALID = ["ZOOMIN","ZOOMOUT","ZOOMSTOP"];
   if (!VALID.includes(action)) return res.status(400).json({ error: "Invalid zoom action" });
-  const result = await cgiRequest(`/cgi-bin/ptzctrl.cgi?ptzcmd&${action}&${zs}`,`ptz/zoom : ${action}&${zs}`);
+
+  const result = await cgiRequest(`/cgi-bin/ptzctrl.cgi?ptzcmd&${action.toLowerCase()}&${zs}`,`ptz/zoom : ${action.toLowerCase()}&${zs}`);
   res.json({ success: result.ok, data : result.data,action, zoom_speed: zs });
+});
+
+app.get("/api/ptz/focus_mode", async (req,res)=>{
+
+      const mode = (req.query.mode || "AUTO").toUpperCase();
+      const VALID = ["AUTO","MANUAL"];
+    if (!VALID.includes(mode)) return res.status(400).json({ error: "Invalid focus mode" });
+
+    let ep;
+
+    if(mode === "AUTO"){
+        ep = `/cgi-bin/ptzctrl.cgi?ptzcmd&unlock_mfocus`;
+    }else if(mode === "MANUAL"){  
+        ep = `/cgi-bin/ptzctrl.cgi?ptzcmd&lock_mfocus`;
+    }
+
+    const result = await cgiRequest(ep,"Focus Mode");
+     res.json({success:result.ok, mode});
+});
+
+// ============================================================================
+// ROUTE: FOCUS  (Continuous)
+// GET  /api/ptz/focus?action=FOCUSIN&fs=4
+// action: FOCUSIN FOCUSOUT STOP
+// ============================================================================
+app.get("/api/ptz/focus", async (req, res) => {
+
+  const action = (req.query.action || "FOCUSSTOP").toUpperCase();
+  const fs     = Math.min(7, Math.max(1, parseInt(req.query.fs || CAMERA_CONFIGURATION.PTZ_STATE.defaultFocusSpeed)));
+  const VALID = ["FOCUSIN","FOCUSOUT","FOCUSSTOP"];
+  if (!VALID.includes(action)) return res.status(400).json({ error: "Invalid focus action" });
+
+  const result = await cgiRequest(`/cgi-bin/ptzctrl.cgi?ptzcmd&${action.toLowerCase()}&${fs}`,`ptz/focus : ${action.toLowerCase()}&${fs}`);
+  res.json({ success: result.ok, data : result.data,action, focus_speed: fs });
 });
 
 // ============================================================================
@@ -583,48 +653,19 @@ app.get("/api/ptz/preset/set/:id", async (req, res) => {
   if (isNaN(id) || (id > 89 && id < 100) || id > 254) {
     return res.status(400).json({ error: "Invalid preset ID" });
   }
-
-  const result = await cgiRequest(`/cgi-bin/ptzctrl.cgi?ptzcmd&POSSET&${id}`,`Preset Set ${id}`);
+  const result = await cgiRequest(`/cgi-bin/ptzctrl.cgi?ptzcmd&posset&${id}`,`Preset Set ${id}`);
   res.json({ success: result.ok,data : result.data });
 });
 
 // Preset Call
 app.get("/api/ptz/preset/call/:id", async (req, res) => {
   const id = parseInt(req.params.id);
-  if (isNaN(id) || (id > 89 && id < 100) || id > 254) {
+  if (isNaN(id) || id < 1  || id > 254) {
     return res.status(400).json({ error: "Invalid preset ID" });
   }
-  
-  const result = await cgiRequest(
-    `/cgi-bin/ptzctrl.cgi?ptzcmd&POSCALL&${id}`,
-    `Preset Call ${id}`
-  );
-  res.json({ success: result.ok });
+  const result = await cgiRequest(`/cgi-bin/ptzctrl.cgi?ptzcmd&poscall&${id}`,`Preset Call ${id}`);
+   res.json({ success: result.ok,data : result.data });
 });
-
-
-
-app.post("/api/image/setting", async (req, res) => {
-  const { mode, level } = req.body;
-  
-  const validModes = ['BRIGHT', 'SATURATION', 'CONTRAST', 'SHARPNESS', 'HUE'];
-  if (!validModes.includes(mode.toUpperCase())) {
-    return res.status(400).json({ error: 'Invalid mode' });
-  }
-  
-  const levelInt = Math.max(0, Math.min(14, parseInt(level)));
-  
-  // Use HTTP-CGI
-  const url = `http://${CAMERA_CONFIGURATION.camera_network.httpUser}:${CAMERA_CONFIGURATION.camera_network.httpPass}@${CAMERA_CONFIGURATION.camera_network.ip}/cgi-bin/param.cgi?post_image_value&${mode.toUpperCase()}&${levelInt}`;
-  
-  try {
-    await axios.get(url, { timeout: 5000 });
-    res.json({ success: true });
-  } catch (error) {
-    res.json({ success: false, error: error.message });
-  }
-});
-
 
 
 function GET_DATE_TIME_FORMATED() {
@@ -3324,11 +3365,11 @@ function gracefulShutdown(signal) {
 }
 
 function cleanupPort(port) {  //fuser finds which process is using a port and can kill it.
-  try {
+  try{
     execSync(`sudo fuser -k ${port}/tcp`);
     console.log(`🧹 Cleared port ${port}`);
-  } catch {
-    console.log(`ℹ️ Port ${port} already free`);
+  } catch (err) {
+    console.log(`ℹ️ Port ${port} already free`,err);
   }
 }
 
