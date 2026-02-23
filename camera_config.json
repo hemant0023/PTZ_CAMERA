@@ -1,0 +1,72 @@
+{
+  "CAMERA_MODE": "RTSP",
+  "DEVICE_NODE": "/dev/video0",
+  "format": "h264",
+  "resolution": "1920x1080",
+  "fps": 30,
+  "bitrate": "4M",
+  "EXTENSION": ".mp4",
+  "IMAGE_SETTINGS": {
+    "brightness": 7,
+    "contrast": 7,
+    "saturation": 6,
+    "sharpness": 7,
+    "whiteBalance": "auto",
+    "exposure": "auto",
+    "backlight": false,
+    "wdr": false,
+    "hue": 7,
+    "flip": 0,
+    "mirror": 0
+  },
+  "camera_network": {
+    "CAMERA_ONLINE": false,
+    "ip": "192.168.29.54",
+    "subnet_mask": "255.255.255.0",
+    "gate_way": "192.168.100.1",
+    "DNS_Address": "8.8.8.8",
+    "MAC_Address": "D4:E0:8E:99:3E:DF",
+    "http_port": 80,
+    "rtspPort": 554,
+    "tcp_port": 5678,
+    "udp_port": 1259,
+    "Sony_Visca_port": 52381,
+    "rtspPath": "/stream1",
+    "httpUser": "admin",
+    "httpPass": "admin",
+    "viscaTcpPort": 5678,
+    "viscaUdpPort": 1259,
+    "CAMERA_BASE_URL": null,
+    "rtspUrl": "rtsp://admin:admin@192.168.29.54:554/stream1",
+    "httpCgiBase": "http://admin:admin@192.168.29.54"
+  },
+  "mediamtx": {
+    "binary": "./mediamtx",
+    "configFile": "./mediamtx.yml",
+    "webRTCPort": 8889,
+    "rtspPort": 8554,
+    "streamPath": "live_camera"
+  },
+  "PTZ_STATE": {
+    "hasPTZ": true,
+    "hasZoom": true,
+    "hasPresets": true,
+    "defaultPanSpeed": 12,
+    "defaultTiltSpeed": 10,
+    "defaultZoomSpeed": 4,
+    "defaultFocusSpeed": 4,
+    "minZoom": 1,
+    "maxZoom": 20,
+    "panspeed": 10,
+    "tiltspeed": 10,
+    "panRange": [
+      -180,
+      180
+    ],
+    "tiltRange": [
+      -90,
+      90
+    ],
+    "moving": false
+  }
+}

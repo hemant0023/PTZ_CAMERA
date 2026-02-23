@@ -2,67 +2,845 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>CAMERA CONFIGURATION</title>
-  <link rel="stylesheet" href="css/style.css">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Camera Configuration - PTZ System</title>
+  <!-- <link rel="stylesheet" href="css/style.css"> -->
+
+
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    :root {
+      --primary: #0066cc;
+      --success: #28a745;
+      --danger: #dc3545;
+      --warning: #ffc107;
+      --dark: #1a1a1a;
+      --panel: #2a2a2a;
+      --control: #333333;
+      --border: #444444;
+      --text: #ffffff;
+      --text-secondary: #aaaaaa;
+    }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
+      color: var(--text);
+      min-height: 100vh;
+      padding-bottom: 50px;
+    }
+
+    /* Navigation */
+    .navbar {
+      background: linear-gradient(135deg, #1a1a1a 0%, #2a2a2a 100%);
+      padding: 15px 30px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      border-bottom: 2px solid var(--primary);
+    }
+
+    .logo {
+      font-size: 24px;
+      font-weight: bold;
+      background: linear-gradient(135deg, #0066cc, #0099ff);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 15px;
+      letter-spacing: 2px;
+    }
+
+    .nav-links {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .nav-a {
+      padding: 10px 20px;
+      background: var(--control);
+      border: 2px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 13px;
+      letter-spacing: 1px;
+      transition: all 0.3s ease;
+      text-transform: uppercase;
+    }
+
+    .nav-a:hover {
+      background: linear-gradient(135deg, var(--primary), #0099ff);
+      border-color: var(--primary);
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(0, 102, 204, 0.3);
+    }
+
+    .nav-a.active {
+      background: linear-gradient(135deg, var(--primary), #0099ff);
+      border-color: var(--primary);
+      box-shadow: 0 4px 12px rgba(0, 102, 204, 0.4);
+    }
+
+    /* Page Container */
+    .page {
+      max-width: 1600px;
+      margin: 30px auto;
+      padding: 0 30px;
+    }
+
+    .page-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 30px;
+    }
+
+    h1 {
+      font-size: 32px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      background: linear-gradient(135deg, #ffffff, #aaaaaa);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    /* Live Preview */
+    .live-preview {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      width: 320px;
+      background: var(--panel);
+      border: 2px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+      z-index: 1000;
+    }
+
+    .preview-header {
+      background: linear-gradient(135deg, var(--primary), #0099ff);
+      padding: 10px 15px;
+      font-weight: 600;
+      font-size: 12px;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .preview-toggle {
+      background: rgba(255, 255, 255, 0.2);
+      border: none;
+      color: white;
+      padding: 5px 10px;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .preview-toggle:hover {
+      background: rgba(255, 255, 255, 0.3);
+    }
+
+    .preview-video {
+      width: 100%;
+      height: 180px;
+      background: #000;
+      object-fit: cover;
+    }
+
+    .preview-status {
+      padding: 8px 15px;
+      font-size: 11px;
+      background: var(--control);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--success);
+      animation: pulse 2s infinite;
+      margin-right: 5px;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    /* Main Content Grid */
+    .config-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 25px;
+    }
+
+    /* Config Panels */
+    .config-panel {
+      background: var(--panel);
+      border: 2px solid var(--border);
+      border-radius: 12px;
+      padding: 25px;
+      backdrop-filter: blur(10px);
+      transition: all 0.3s ease;
+    }
+
+    .config-panel:hover {
+      border-color: var(--primary);
+      box-shadow: 0 8px 32px rgba(0, 102, 204, 0.2);
+    }
+
+    .panel-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 20px;
+      padding-bottom: 15px;
+      border-bottom: 2px solid var(--border);
+    }
+
+    .panel-icon {
+      font-size: 28px;
+      filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
+    }
+
+    .panel-title {
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      color: var(--text);
+    }
+
+    /* Form Groups */
+    .form-group {
+      margin-bottom: 20px;
+    }
+
+    .form-label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      color: var(--text-secondary);
+      margin-bottom: 8px;
+    }
+
+    .form-control {
+      width: 100%;
+      padding: 12px 16px;
+      background: var(--control);
+      border: 2px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-size: 14px;
+      font-family: inherit;
+      transition: all 0.3s ease;
+    }
+
+    .form-control:focus {
+      outline: none;
+      border-color: var(--primary);
+      background: rgba(0, 102, 204, 0.1);
+      box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.2);
+    }
+
+    select.form-control {
+      cursor: pointer;
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23ffffff' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 12px center;
+      padding-right: 40px;
+    }
+
+    .form-control:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .form-row {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 15px;
+    }
+
+    /* Toggle Switch */
+    .toggle-switch {
+      position: relative;
+      width: 60px;
+      height: 30px;
+      background: var(--control);
+      border: 2px solid var(--border);
+      border-radius: 15px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+    }
+
+    .toggle-switch.active {
+      background: linear-gradient(135deg, var(--primary), #0099ff);
+      border-color: var(--primary);
+    }
+
+    .toggle-slider {
+      position: absolute;
+      top: 3px;
+      left: 3px;
+      width: 22px;
+      height: 22px;
+      background: white;
+      border-radius: 50%;
+      transition: transform 0.3s ease;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+    }
+
+    .toggle-switch.active .toggle-slider {
+      transform: translateX(30px);
+    }
+
+    .toggle-group {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    /* Radio Group */
+    .radio-group {
+      display: flex;
+      gap: 15px;
+      flex-wrap: wrap;
+    }
+
+    .radio-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+    }
+
+    .radio-item input[type="radio"] {
+      width: 18px;
+      height: 18px;
+      cursor: pointer;
+      accent-color: var(--primary);
+    }
+
+    /* Info Display */
+    .info-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+    }
+
+    .info-item {
+      background: var(--control);
+      padding: 12px;
+      border-radius: 8px;
+      border: 2px solid var(--border);
+    }
+
+    .info-label {
+      font-size: 11px;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 5px;
+    }
+
+    .info-value {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--text);
+      font-family: 'Courier New', monospace;
+    }
+
+    /* Buttons */
+    .btn {
+      padding: 12px 24px;
+      border: 2px solid transparent;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      font-family: inherit;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, var(--primary), #0099ff);
+      color: white;
+      border-color: var(--primary);
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(0, 102, 204, 0.4);
+    }
+
+    .btn-success {
+      background: linear-gradient(135deg, var(--success), #34ce57);
+      color: white;
+      border-color: var(--success);
+    }
+
+    .btn-success:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(40, 167, 69, 0.4);
+    }
+
+    .btn-warning {
+      background: linear-gradient(135deg, var(--warning), #ffd700);
+      color: #1a1a1a;
+      border-color: var(--warning);
+    }
+
+    .btn-warning:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(255, 193, 7, 0.4);
+    }
+
+    .btn-danger {
+      background: linear-gradient(135deg, var(--danger), #ff4757);
+      color: white;
+      border-color: var(--danger);
+    }
+
+    .btn-danger:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(220, 53, 69, 0.4);
+    }
+
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none !important;
+    }
+
+    .btn-group {
+      display: flex;
+      gap: 12px;
+      margin-top: 20px;
+    }
+
+    /* Status Messages */
+    .status-message {
+      padding: 15px 20px;
+      border-radius: 8px;
+      font-weight: 600;
+      margin-top: 20px;
+      display: none;
+      animation: slideIn 0.3s ease;
+    }
+
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateY(-10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .status-message.success {
+      background: rgba(40, 167, 69, 0.2);
+      border: 2px solid var(--success);
+      color: var(--success);
+    }
+
+    .status-message.error {
+      background: rgba(220, 53, 69, 0.2);
+      border: 2px solid var(--danger);
+      color: var(--danger);
+    }
+
+    .status-message.info {
+      background: rgba(0, 102, 204, 0.2);
+      border: 2px solid var(--primary);
+      color: var(--primary);
+    }
+
+    /* Connection Badge */
+    .connection-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 16px;
+      background: var(--control);
+      border: 2px solid var(--border);
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .connection-badge.online {
+      border-color: var(--success);
+      background: rgba(40, 167, 69, 0.1);
+      color: var(--success);
+    }
+
+    .connection-badge.offline {
+      border-color: var(--danger);
+      background: rgba(220, 53, 69, 0.1);
+      color: var(--danger);
+    }
+
+    /* Responsive */
+    @media (max-width: 1200px) {
+      .config-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 768px) {
+      .nav-links {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+      }
+
+      .form-row {
+        grid-template-columns: 1fr;
+      }
+
+      .info-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .live-preview {
+        width: 280px;
+      }
+
+      .btn-group {
+        flex-direction: column;
+      }
+    }
+  </style>
 </head>
 <body>
 
-<!-- <nav  class="navbar">
-  <div class="logo">📷 CAMERA SYSTEM CONTROL</div>
-  <ul>
-    <li><a href="/">HOME</a></li>
-    <li class="active">CONFIGURATION</li>
-    <li><a href="records.html">RECORDS</a></li>
-  </ul>
-</nav> -->
+  <!-- Navigation -->
+  <nav class="navbar">
+    <div class="logo">📷 PTZ CAMERA SYSTEM</div>
+    <div class="nav-links">
+      <a href="index.html" class="nav-a">🎥 LIVE VIEW</a>
+      <a href="config.html" class="nav-a active">⚡ CONFIG</a>
+      <a href="records.html" class="nav-a">📁 RECORDS</a>
+    </div>
+  </nav>
 
-<nav class="navbar">
-<div class="logo">📷 CAMERA SYSTEM CONTROL</div>
-  <div class="nav-links">
-    <a href="index.html"               class="nav-a"  >LIVE VIEW</a>
-    <a href="PTZ_CONTROLS.html"        class="nav-a">PTZ CONTROL</a>
-    <a href="CAMERA_IMAGE_SETTING.html"class="nav-a ">IMAGE</a>
-    <a href="RECORDING_SETTING.html"  class="nav-a">RECORDING</a>
-    <a href="PTZ_PRESET_SETTING.html" class="nav-a">PRESETS</a>
-    <a href="SYSTEM_INFORMATION.html" class="nav-a">SYSTEM</a>
-    <a href="config.html"             class="nav-a" > active</a>
-    <a href="records.html"            class="nav-a"> >RECORDS</a>
+  <!-- Page Content -->
+  <div class="page">
+    
+    <!-- Page Header -->
+    <div class="page-header">
+      <h1>⚙️ Camera Configuration</h1>
+      <div class="connection-badge" id="cameraStatus">
+        <span class="status-dot"></span>
+        <span>Checking...</span>
+      </div>
+    </div>
+
+    <!-- Configuration Grid -->
+    <div class="config-grid">
+
+      <!-- Camera Mode Panel -->
+      <div class="config-panel">
+        <div class="panel-header">
+          <div class="panel-icon">📹</div>
+          <div class="panel-title">Camera network Mode</div>
+        </div>
+        
+        <div class="form-group">
+          <label class="form-label">Operating Mode</label>
+          <div class="radio-group">
+            <label class="radio-item">
+              <input type="radio" name="cameraMode" value="RTSP" checked>
+              <span>RTSP (Network Camera)</span>
+            </label>
+            <label class="radio-item">
+              <input type="radio" name="cameraMode" value="USB">
+              <span>USB (Direct Connection)</span>
+            </label>
+          </div>
+        </div>
+
+        <div id="usbSettings" style="display: none;">
+          <div class="form-group">
+            <label class="form-label">Device Node</label>
+            <input type="text" class="form-control" id="deviceNode" value="/dev/video0">
+          </div>
+        </div>
+
+        <div id="rtspSettings">
+
+          <div class="form-group">
+            <label class="form-label">Camera IP Address</label>
+            <input type="text" class="form-control" id="cameraIP" placeholder="192.168.29.54">
+          </div>
+
+          <div class="form-row">
+
+            <div class="form-group">
+              <label class="form-label">RTSP Port</label>
+              <input type="number" class="form-control" id="rtspPort" value="554">
+            </div>
+            <div class="form-group">
+              <label class="form-label">HTTP Port</label>
+              <input type="number" class="form-control" id="httpPort" value="80">
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">RTSP Stream Path</label>
+            <input type="text" class="form-control" id="rtspPath" placeholder="/stream1">
+          </div>
+
+  
+          <div class="form-row">
+
+            <div class="form-group">
+              <label class="form-label">Username</label>
+              <input type="text" class="form-control" id="httpUser" placeholder="admin">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Password</label>
+              <input type="password" class="form-control" id="httpPass" placeholder="password">
+            </div>
+      
+          </div>
+
+        </div>
+      </div>
+
+
+        <!-- Network Settings Panel -->
+      <div class="config-panel">
+        <div class="panel-header">
+          <div class="panel-icon">🌐</div>
+          <div class="panel-title">System Network Configuration</div>
+        </div>
+
+        <div class="form-group">
+            <label class="form-label">IP Address</label>
+            <input type="text" class="form-control" id="cameraIP" placeholder="192.168.29.54">
+          </div>
+
+        <div class="form-group">
+          <label class="form-label">Subnet Mask</label>
+          <input type="text" class="form-control" id="subnetMask" placeholder="255.255.255.0">
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Gateway</label>
+            <input type="text" class="form-control" id="gateway" placeholder="192.168.100.1">
+          </div>
+          <div class="form-group">
+            <label class="form-label">DNS Server</label>
+            <input type="text" class="form-control" id="dns" placeholder="8.8.8.8">
+          </div>
+        </div>
+      
+          <div class="form-group">
+          <label class="form-label">MAC Address</label>
+          <input type="text" class="form-control" id="macAddress" placeholder="D4:E0:8E:99:3E:DF" readonly>
+        </div>
+
+        <div class="form-row">
+          
+          <div class="form-group">
+            <label class="form-label">TCP Port</label>
+            <input type="number" class="form-control" id="tcpPort" value="5678">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">UDP Port</label>
+            <input type="number" class="form-control" id="udpPort" value="1259">
+          </div>
+
+        </div>
+    
+      </div>
+
+      <!-- Video Settings Panel -->
+      <div class="config-panel">
+        <div class="panel-header">
+          <div class="panel-icon">🎬</div>
+          <div class="panel-title">Video Settings</div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Video Format</label>
+          <select class="form-control" id="format">
+            <option value="H264">H.264 (Recommended)</option>
+            <option value="MJPEG">MJPEG</option>
+            <option value="YUYV">YUYV</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Resolution</label>
+          <select class="form-control" id="resolution">
+            <!-- Will be populated dynamically -->
+          </select>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Frame Rate</label>
+            <select class="form-control" id="fps">
+              <!-- Will be populated dynamically -->
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Bitrate</label>
+            <select class="form-control" id="bitrate">
+              <!-- Will be populated dynamically -->
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">File Extension</label>
+          <select class="form-control" id="extension">
+            <option value=".mp4">MP4 (Recommended)</option>
+            <option value=".mkv">MKV</option>
+          </select>
+        </div>
+      </div>
+
+    
+
+      <!-- PTZ Settings Panel -->
+      <div class="config-panel">
+        <div class="panel-header">
+          <div class="panel-icon">🎯</div>
+          <div class="panel-title">PTZ Configuration</div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">PTZ Capabilities</label>
+          <div class="info-grid">
+            <div class="info-item">
+              <div class="info-label">Pan Range</div>
+              <div class="info-value">-180° to +180°</div>
+            </div>
+            <div class="info-item">
+              <div class="info-label">Tilt Range</div>
+              <div class="info-value">-90° to +90°</div>
+            </div>
+            <div class="info-item">
+              <div class="info-label">Zoom Range</div>
+              <div class="info-value">1x to 20x</div>
+            </div>
+            <div class="info-item">
+              <div class="info-label">Presets</div>
+              <div class="info-value">255 Total</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Default Pan Speed (1-24)</label>
+            <input type="number" class="form-control" id="panSpeed" min="1" max="24" value="12">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Default Tilt Speed (1-20)</label>
+            <input type="number" class="form-control" id="tiltSpeed" min="1" max="20" value="10">
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Zoom Speed (1-7)</label>
+            <input type="number" class="form-control" id="zoomSpeed" min="1" max="7" value="4">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Focus Speed (1-7)</label>
+            <input type="number" class="form-control" id="focusSpeed" min="1" max="7" value="4">
+          </div>
+        </div>
+      </div>
+
+      <!-- Current Configuration Display -->
+      <div class="config-panel" style="grid-column: 1 / -1;">
+        <div class="panel-header">
+          <div class="panel-icon">📊</div>
+          <div class="panel-title">Current Configuration</div>
+        </div>
+
+        <div class="info-grid">
+          <div class="info-item">
+            <div class="info-label">Camera Mode</div>
+            <div class="info-value" id="currentMode">--</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">Resolution</div>
+            <div class="info-value" id="currentResolution">--</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">Frame Rate</div>
+            <div class="info-value" id="currentFPS">--</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">Bitrate</div>
+            <div class="info-value" id="currentBitrate">--</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">Format</div>
+            <div class="info-value" id="currentFormat">--</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">RTSP URL</div>
+            <div class="info-value" id="currentRTSP" style="font-size: 12px; word-break: break-all;">--</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Action Buttons -->
+    <div class="btn-group">
+      <button class="btn btn-primary" id="testConnectionBtn">🔍 Test Connection</button>
+      <button class="btn btn-warning" id="previewBtn">👁️ Test Stream Quality</button>
+      <button class="btn btn-success" id="saveConfigBtn">💾 Save Configuration</button>
+      <button class="btn btn-danger" id="resetBtn">↺ Reset to Defaults</button>
+    </div>
+
+    <!-- Status Message -->
+    <div class="status-message" id="statusMessage"></div>
+
   </div>
-</nav>
 
-<div class="page">
-
-  <h1>CAMERA CONFIGURATION</h1>
-  <div class="config-card">
-    <form id="configForm">
-
-      <div class="form-group">
-        <label>Video Format</label>
-        <select id="formatSelect"></select>
-      </div>
-
-      <div class="form-group">
-        <label>Resolution</label>
-        <select id="resolutionSelect"></select>
-      </div>
-
-      <div class="form-group">
-        <label>Frame Rate (FPS)</label>
-        <select id="fpsSelect"></select>
-      </div>
-
-      <div class="form-actions">
-        <button type="submit" class="primary">SUBMIT</button>
-      </div>
-
-      <div id="configStatus" class="status-text"></div>
-
-    </form>
-
+  <!-- Live Preview (Bottom Right Corner) -->
+  <div class="live-preview" id="livePreview">
+    <div class="preview-header">
+      <span>📡 LIVE PREVIEW</span>
+      <button class="preview-toggle" id="togglePreview">Hide</button>
+    </div>
+    <video class="preview-video" id="previewVideo" autoplay muted></video>
+    <div class="preview-status">
+      <span><span class="status-dot"></span> <span id="previewStatus">Ready</span></span>
+      <span id="previewQuality">--</span>
+    </div>
   </div>
 
-</div>
+  <script src="js/config.js"></script>
 
-<script src="js/config.js"></script>
 </body>
 </html>

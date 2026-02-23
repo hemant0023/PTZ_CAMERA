@@ -29,6 +29,8 @@ const axios = require('axios');
 
 const cors = require('cors');
 const { Console } = require("console");
+const e = require("express");
+
 app.use(cors({
  origin: "*" ,//true,
   credentials: true,
@@ -41,48 +43,51 @@ app.get("/", (req, res) => {
    res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
-let  sdMountPoint = null;
-let  videosDir = null;
-let ffmpegProcess = null;
-let CAMERA_CONFIGURATION_CAP = {};
-let ffmpegStopping = false;
+
+
+let  ffmpegProcess = null;
+let  CAMERA_CONFIGURATION_CAP = {};
+let  ffmpegStopping = false;
 let lastStopTs = 0;
 let CAMERA_USB_PORT_ERROR_SOLVE_TIME_STAAMP= 0;
- 
+const MAX_BUFFER              = 3 * 1024 * 1024; // 2 MB
+const MIN_STOP_INTERVAL_MS    = 1500;   // ⏱ no double stop spam
+const DEVICE_RELEASE_DELAY_MS = 800;
+
+let mp4Header = null;           // ftyp + empty_moov
+
 let deadClients = [];
 let WESOCKET_CONNECTED_FLAG= false;
 let WESOCKET_SEND_DATA_CONNECTED_FLAG = true;
 let ALLOWED_LIVE_FLAG = true;
 const liveClients = new Set(); 
 let LIVE_STREAM_ENABLED = true;
-let mp4Header = null;           // ftyp + empty_moov
-const MAX_BUFFER    = 3 * 1024 * 1024; // 2 MB
-const MIN_STOP_INTERVAL_MS    = 1500;   // ⏱ no double stop spam
-const DEVICE_RELEASE_DELAY_MS = 800;
- const SD_CARD_MIN_REQUIRED_MB = 100;
+
+
+let  videosDir    = null;
+let  sdMountPoint = null;
+const SD_CARD_MIN_REQUIRED_MB = 100;
 let SD_CARD_FREE_SPACE = 0;
 
 
-const CAMERA_CONFIGURATION = {
+let CAMERA_CONFIGURATION = {
 
    CAMERA_MODE : "RTSP", //USB,RTSP
    DEVICE_NODE: "/dev/video0",
 
+   //video_settings
    format: "h264", // mjpeg | yuyv | h264
    resolution: "1920x1080",
    fps: 30, //5,15,30,50,60
    bitrate: "4M",
-   width: 1280,
-   height: 720, 
    EXTENSION: ".mp4",      // mkv | mp4
-
-
+   
   IMAGE_SETTINGS : {
 
-  brightness: 50,
-  contrast: 50,
-  saturation: 50,
-  sharpness: 50,
+  brightness: 7,
+  contrast: 7,
+  saturation: 6,
+  sharpness: 7,
   whiteBalance: "auto",
   exposure: "auto",
   backlight: false,
@@ -127,7 +132,6 @@ const CAMERA_CONFIGURATION = {
 
  // Camera capabilities
   PTZ_STATE: {
-
     hasPTZ: true,
     hasZoom: true,
     hasPresets: true,
@@ -135,57 +139,350 @@ const CAMERA_CONFIGURATION = {
     defaultTiltSpeed:  10,   // 1–20
     defaultZoomSpeed:  4,    // 1–7
     defaultFocusSpeed: 4,    // 1–7
-    minZoom: 1,
-    maxZoom: 20,
-    panspeed: 10,
+    minZoom:   1,
+    maxZoom:   20,
+    panspeed:  10,
     tiltspeed: 10,
     panRange: [-180, 180],
     tiltRange: [-90, 90],
      moving: false 
   },
 
-  storage: {
-    enabled:    true,
-    mountCheck: true,
-  },
-
 };
 
 
+CAMERA_CONFIGURATION_CAP = {
+  REC_FORMATS: ["MJPEG", "YUYV", "H264"],
+  REC_RESOLUTIONS: ["320x240","480x272","424x240","640x360","640x480","720x480","800x448","800x600","1024x576","1024x768","1280x720","1920x1080","2560x1440","3840x2160"],
+  REC_FPS: [10,15,20,24,25,30,50,60],
+  CAMERA_MODE : ["USB","RTSP"], 
+  REC_BITERATE : ["1M","2M","4M","6M","8M"],
+  EXTENSION : [".mp4",".mkv"]
+};
+
 let RECORDING_STATE = {
   
-  status : "IDLE",
+  status: "IDLE",
   active: false,
   paused: false,
-  filename: null,
-  FINAL_FINAL_NAME : null,
-  folder_name: null,
-  FINAL_FILE_PATH: null,
-  REC_START_TIME: null,
-  REC_STOP_TIME : null,
+  AUDIO_MUTED_FLAG: false,
+  REC_TIMER_MS: null,
+  REC_TIMER_STATE: "OFF",
+  filename:          null,
+  FINAL_FILE_NAME :  null,
+  VIDEO_FOLDER_NAME: null,
+  FINAL_FILE_SAVE_PATH:   null,
+
+  REC_START_TIME:     null,
+  REC_STOP_TIME :     null,
   REC_VIDEO_DURATION: null,
-  pausedAt: null,
-  totalPausedMs: 0,
+  PAUSED_AT_TIME:     null,
+  TOT_PAUSED_DURATION_MS: 0,
+  FINAL_FILE_URL_PATH : null,
+
   segments: [], 
   curr_segment: null
 
 };
  
 let FFMPEG_ERROR = {
+
   result: null,
   reason: null,
-  SPAWN_FAILED: 1,
-  DEVICE_BUSY: 2,
+  SPAWN_FAILED:     1,
+  DEVICE_BUSY:      2,
   INVALID_ARGUMENT: 3,
-  PROCESS_EXITED: 4,
+  PROCESS_EXITED:   4,
   UNKNOWN: 99
 
 };
 
-//const net       = require("net");       // For VISCA TCP
-//const dgram     = require("dgram");     // For VISCA UDP
+
+
+function RESET_DAUFALT_CAMERA_STATE(){
+  // Reset state
+     
+    
+    RECORDING_STATE.status = "IDLE";
+    RECORDING_STATE.active = false;
+    RECORDING_STATE.paused = false;
+    RECORDING_STATE.PAUSED_AT_TIME = null;
+    RECORDING_STATE.TOT_PAUSED_DURATION_MS = 0;
+   
+    
+    RECORDING_STATE.REC_START_TIME = null;
+    RECORDING_STATE.REC_STOP_TIME = null;
+    RECORDING_STATE.REC_VIDEO_DURATION = null;
+
+    RECORDING_STATE.REC_TIMER_MS = null;
+    RECORDING_STATE.REC_TIMER_STATE = "OFF";
+    RECORDING_STATE.AUDIO_MUTED_FLAG = false;
+  
+    RECORDING_STATE.curr_segment = null;
+    RECORDING_STATE.segments = [];
+    RECORDING_STATE.filename = null;
+    RECORDING_STATE.FINAL_FILE_NAME = null;
+    RECORDING_STATE.VIDEO_FOLDER_NAME = null;
+    RECORDING_STATE.FINAL_FILE_URL_PATH = null;
+    RECORDING_STATE.FINAL_FILE_SAVE_PATH = null;
+
+    FFMPEG_ERROR.result = null;
+}
+
+app.get("/api/camera/config", (req, res) => {
+
+  console.log("GET CAMERA CONFIGURATION REQUEST");
+  
+  if (!CAMERA_CONFIGURATION_CAP) {
+    console.error("GET CAMERA CONFIGURATION ERROR:", CAMERA_CONFIGURATION_CAP);
+    return res.status(500).json({ error: "CONFIGURATION_SETTING_FAILED" });
+  }
+ 
+  // Build RTSP URL dynamically
+  if (CAMERA_CONFIGURATION.camera_network) {
+    CAMERA_CONFIGURATION.camera_network.rtspUrl = 
+      `rtsp://${CAMERA_CONFIGURATION.camera_network.httpUser}:${CAMERA_CONFIGURATION.camera_network.httpPass}@${CAMERA_CONFIGURATION.camera_network.ip}:${CAMERA_CONFIGURATION.camera_network.rtspPort}${CAMERA_CONFIGURATION.camera_network.rtspPath}`;
+    
+    CAMERA_CONFIGURATION.camera_network.httpCgiBase = 
+      `http://${CAMERA_CONFIGURATION.camera_network.httpUser}:${CAMERA_CONFIGURATION.camera_network.httpPass}@${CAMERA_CONFIGURATION.camera_network.ip}`;
+  }
+
+  res.json({
+    success: true,
+    current: CAMERA_CONFIGURATION,
+    capabilities: CAMERA_CONFIGURATION_CAP
+  });
+});
+
+// Helper function to parse v4l2-ctl output
+function parseV4L2Capabilities(output){
+
+  const capabilities = {
+    formats: [],
+    resolutions: [],
+    fps: []
+  };
+
+  const lines = output.split('\n');
+  let currentFormat = null;
+
+  for (const line of lines) {
+    // Format line: [0]: 'MJPG'
+    const formatMatch = line.match(/\[\d+\]:\s+'(\w+)'/);
+    if (formatMatch) {
+      currentFormat = formatMatch[1];
+      if (!capabilities.formats.includes(currentFormat)) {
+        capabilities.formats.push(currentFormat);
+      }
+      continue;
+    }
+
+    // Resolution line: Size: Discrete 1920x1080
+    const sizeMatch = line.match(/Size:\s+Discrete\s+(\d+x\d+)/);
+    if (sizeMatch && currentFormat) {
+      const resolution = sizeMatch[1];
+      if (!capabilities.resolutions.includes(resolution)) {
+        capabilities.resolutions.push(resolution);
+      }
+      continue;
+    }
+
+    // FPS line: Interval: Discrete 0.033s (30.000 fps)
+    const fpsMatch = line.match(/\(([\d.]+)\s+fps\)/);
+    if (fpsMatch && currentFormat) {
+      const fps = Math.round(parseFloat(fpsMatch[1]));
+      if (!capabilities.fps.includes(fps)) {
+        capabilities.fps.push(fps);
+      }
+    }
+  }
+
+  // Sort
+  capabilities.fps.sort((a, b) => a - b);
+  
+  return capabilities;
+}
+
+// ============================================================================
+// ROUTE: CAMERA CONFIG (read/update server config)
+// ============================================================================
+app.get("/api/CAMERA_DETAILS", (req, res) => {
+ try {
+  res.json({
+
+    camera_ip:    CAMERA_CONFIGURATION.camera_network.ip,
+    rtsp_port:    CAMERA_CONFIGURATION.camera_network.rtspPort,
+    rtsp_path:    CAMERA_CONFIGURATION.camera_network.rtspPath,
+    webrtc_url:   CAMERA_CONFIGURATION.camera_network.rtspUrl,
+   // http_cgi_base: CAMERA_CONFIGURATION.camera_network.httpCgiBase,
+   // image_state:  CAMERA_CONFIGURATION.IMAGE_STATE,
+   /// ptz_state:    CAMERA_CONFIGURATION.PTZ_STATE,
+    camera_online: CAMERA_CONFIGURATION.camera_network.CAMERA_ONLINE,
+  });
+ 
+  }catch (error){
+    console.error("❌ CAMERA_DETAILS:", error);
+    res.status(500).json({success: false,error: "CAMERA_DETAILS_FAILED",message: error.message});
+  }
+});
+
+
+
+
+
+app.post("/api/camera/config", (req, res) => {
+  console.log("NEW POST CAMERA CONFIGURATION:", req.body);
+
+  try {
+    const {CAMERA_MODE,format,resolution,fps,bitrate,EXTENSION,DEVICE_NODE,camera_network,PTZ_STATE,IMAGE_SETTINGS} = req.body;
+
+    // Validate required video settings
+    if (format && !CAMERA_CONFIGURATION_CAP.REC_FORMATS.includes(format.toUpperCase())) {
+      return res.status(400).json({ error: "Invalid format" });
+    }
+
+    if (resolution && !CAMERA_CONFIGURATION_CAP.REC_RESOLUTIONS.includes(resolution)) {
+      return res.status(400).json({ error: "Invalid resolution" });
+    }
+
+    if (fps && !CAMERA_CONFIGURATION_CAP.REC_FPS.includes(Number(fps))) {
+      return res.status(400).json({ error: "Invalid FPS" });
+    }
+
+    if (bitrate && !CAMERA_CONFIGURATION_CAP.REC_BITERATE.includes(bitrate)) {
+      return res.status(400).json({ error: "Invalid bitrate" });
+    }
+
+    if (CAMERA_MODE && !CAMERA_CONFIGURATION_CAP.CAMERA_MODE.includes(CAMERA_MODE)) {
+      return res.status(400).json({ error: "Invalid camera mode" });
+    }
+     if (EXTENSION && !CAMERA_CONFIGURATION_CAP.EXTENSION.includes(EXTENSION  )) {
+      return res.status(400).json({ error: "Invalid extension" });
+    }
+
+    // Update camera mode
+    if (CAMERA_MODE) {
+      CAMERA_CONFIGURATION.CAMERA_MODE = CAMERA_MODE;
+    }
+
+    // Update video settings
+    if (format) {
+      CAMERA_CONFIGURATION.format = format.toLowerCase();
+    }
+    if (resolution) {
+      CAMERA_CONFIGURATION.resolution = resolution;
+      // Derive width/height
+      // const [width, height] = resolution.split("x").map(Number);
+      // CAMERA_CONFIGURATION.width = width;
+      // CAMERA_CONFIGURATION.height = height;
+    }
+    if (fps) {
+      CAMERA_CONFIGURATION.fps = Number(fps);
+    }
+    if (bitrate) {
+      CAMERA_CONFIGURATION.bitrate = bitrate;
+    }
+    if (EXTENSION) {
+      CAMERA_CONFIGURATION.EXTENSION = EXTENSION;
+    }
+
+    // Update USB settings
+    if (DEVICE_NODE) {
+      CAMERA_CONFIGURATION.DEVICE_NODE = DEVICE_NODE;
+    }
+
+
+    // Update network settings
+    if (camera_network) {
+      CAMERA_CONFIGURATION.camera_network = {
+        ...CAMERA_CONFIGURATION.camera_network,
+        ...camera_network
+      };
+
+    CAMERA_CONFIGURATION.camera_network.rtspUrl     = `rtsp://${CAMERA_CONFIGURATION.camera_network.httpUser}:${CAMERA_CONFIGURATION.camera_network.httpPass}@${CAMERA_CONFIGURATION.camera_network.ip}:${CAMERA_CONFIGURATION.camera_network.rtspPort}${CAMERA_CONFIGURATION.camera_network.rtspPath}`;
+    CAMERA_CONFIGURATION.camera_network.httpCgiBase = `http://${CAMERA_CONFIGURATION.camera_network.httpUser}:${CAMERA_CONFIGURATION.camera_network.httpPass}@${CAMERA_CONFIGURATION.camera_network.ip}`;
+    stopMediaMtx(); // START AUTOMATICALLY 
+   // setTimeout(startMediaMtx, 3000);   
+  }
+
+    // Update PTZ settings
+    if (PTZ_STATE) {
+      CAMERA_CONFIGURATION.PTZ_STATE = {
+        ...CAMERA_CONFIGURATION.PTZ_STATE,
+        ...PTZ_STATE
+      };
+    }
+
+    // Update image settings
+    if (IMAGE_SETTINGS) {
+      CAMERA_CONFIGURATION.IMAGE_SETTINGS = {
+        ...CAMERA_CONFIGURATION.IMAGE_SETTINGS,
+        ...IMAGE_SETTINGS
+      };
+    }
+
+    console.log("✅ UPDATED CAMERA CONFIG:", CAMERA_CONFIGURATION);
+    saveCameraConfig();
+    res.json({success: true,message: "CONFIGURATION_SAVED",current: CAMERA_CONFIGURATION});
+
+  }catch (error){
+    console.error("❌ Configuration save error:", error);
+    res.status(500).json({success: false,error: "CONFIGURATION_SAVE_FAILED",message: error.message});
+  }
+
+});
+
 CAMERA_CONFIGURATION.camera_network.rtspUrl     = `rtsp://${CAMERA_CONFIGURATION.camera_network.httpUser}:${CAMERA_CONFIGURATION.camera_network.httpPass}@${CAMERA_CONFIGURATION.camera_network.ip}:${CAMERA_CONFIGURATION.camera_network.rtspPort}${CAMERA_CONFIGURATION.camera_network.rtspPath}`;
 CAMERA_CONFIGURATION.camera_network.httpCgiBase = `http://${CAMERA_CONFIGURATION.camera_network.httpUser}:${CAMERA_CONFIGURATION.camera_network.httpPass}@${CAMERA_CONFIGURATION.camera_network.ip}`;
+
+const CONFIG_FILE = path.join(__dirname, "camera_config.json");
+
+function saveCameraConfig() {
+
+  const tempFile = CONFIG_FILE + ".tmp";
+
+  fs.writeFileSync(tempFile,
+    JSON.stringify(CAMERA_CONFIGURATION, null, 2)
+  );
+
+  fs.renameSync(tempFile, CONFIG_FILE);
+}
+
+function loadCameraConfig() {
+  try {
+
+    if (fs.existsSync(CONFIG_FILE)) {
+      const data = fs.readFileSync(CONFIG_FILE, "utf8");
+      CAMERA_CONFIGURATION = JSON.parse(data);
+
+      console.log("✅ Camera configuration loaded from file");
+    } else {
+      console.log("⚡❌ No saved config → using defaults");
+      saveCameraConfig(); // create file first time
+    }
+
+  } catch (err) {
+    console.error("❌ Config load failed:", err);
+  }
+}
+
+loadCameraConfig();
+
+function isSafeName(name) {
+  return /^[a-zA-Z0-9._-]+$/.test(name);
+}
+function isSafeName(name) {
+  return /^[a-zA-Z0-9._-]+$/.test(name);
+}
+
+
+function sendError(res, status, code, message, details = {}) {
+
+  return res.status(status).json({
+    success: false,
+    error: { code, message, details }
+  });
+}
 
 
 function getReadyStateName(state) {
@@ -196,22 +493,6 @@ function getReadyStateName(state) {
     case WebSocket.CLOSING: return "CLOSING";
     case WebSocket.CLOSED: return "CLOSED";
     default: return "UNKNOWN";
-  }
-}
-
-async function cgiRequest(path, label = "") {
-
-   const url = `${CAMERA_CONFIGURATION.camera_network.httpCgiBase}${path}`;
-   console.log(`📡 REQUEST [CGI]  ${label || path} URL : ${url}  `);
-  try {
-    const res = await axios.get(url, {
-      timeout: 2000,
-      auth: { username: CAMERA_CONFIGURATION.camera_network.httpUser, password: CAMERA_CONFIGURATION.camera_network.httpPass },
-    });
-    return { ok: true, data: res.data };
-  } catch (err) {
-    console.error(`❌ CGI Error: ${err.message}`);
-    return { ok: false, error: err.message };
   }
 }
 
@@ -237,6 +518,7 @@ function notifyLiveClientsReset(){
 }
 
 
+
 function broadcastStatus() {
 
   const msg = JSON.stringify({
@@ -258,9 +540,23 @@ function broadcastStatus() {
  
 }
 
-//broadcastStatus();
-// Push status every 3 seconds
-setInterval(broadcastStatus, 3000);
+async function cgiRequest(path, label = "") {
+
+   const url = `${CAMERA_CONFIGURATION.camera_network.httpCgiBase}${path}`;
+   console.log(`📡 REQUEST [CGI]  ${label || path} URL : ${url}  `);
+  try {
+    const res = await axios.get(url, {
+      timeout: 2000,
+      auth: { username: CAMERA_CONFIGURATION.camera_network.httpUser, password: CAMERA_CONFIGURATION.camera_network.httpPass },
+    });
+    return { ok: true, data: res.data };
+  } catch (err) {
+    console.error(`❌ CGI Error: ${err.message}`);
+    return { ok: false, error: err.message };
+  }
+}
+
+
 
 //download_mediamtx_v16.1 web_rtc
 //>>wget https://github.com/bluenviron/mediamtx/releases/download/v1.16.1/mediamtx_v1.16.1_linux_arm64.tar.gz
@@ -406,8 +702,8 @@ mediaMtxProcess.once("spawn", () => {
 });
 
   mediaMtxProcess.on("close", code => {
-    console.warn(`⚠️MediaMTX exited (code ${code}), restarting in 3s...`);
-    mediaMtxProcess = null;
+   console.warn(`⚠️MediaMTX exited (code ${code}), restarting `);
+   mediaMtxProcess = null;
    setTimeout(startMediaMtx, 3000);
   });
 
@@ -424,24 +720,113 @@ mediaMtxProcess.once("spawn", () => {
 async function CHECK_CAMERA_ONLINE(){
   
   try {
-    await axios.get(`http://${CAMERA_CONFIGURATION.camera_network.ip}/cgi-bin/param.cgi?get_device_conf`, { timeout: 2000, auth: { username: CAMERA_CONFIGURATION.camera_network.httpUser, password: CAMERA_CONFIGURATION.camera_network.httpPass } });
+
+    if (CAMERA_CONFIGURATION.CAMERA_MODE === 'RTSP') {
+    await axios.get(`http://${CAMERA_CONFIGURATION.camera_network.ip}/cgi-bin/param.cgi?get_device_conf`, { 
+      timeout: 2000, auth: { username: CAMERA_CONFIGURATION.camera_network.httpUser, password: CAMERA_CONFIGURATION.camera_network.httpPass } });
     if (!CAMERA_CONFIGURATION.camera_network.CAMERA_ONLINE){ 
       CAMERA_CONFIGURATION.camera_network.CAMERA_ONLINE = true; 
       console.log("✅ CHECK_CAMERA_ONLINE"); 
-      broadcastStatus(); }
-  
+    
+    }
+
+    
+     } else if (CAMERA_CONFIGURATION.CAMERA_MODE === 'USB') {
+      // Test USB device
+      const deviceExists = fs.existsSync(CAMERA_CONFIGURATION.DEVICE_NODE);
+      if (deviceExists){
+        try {
+          const output = execSync(`v4l2-ctl -d ${CAMERA_CONFIGURATION.DEVICE_NODE} --list-formats-ext`,{ timeout: 3000 }).toString();
+
+          return({success: true,online: true,mode: 'USB',message: 'USB camera detected',
+            device: CAMERA_CONFIGURATION.DEVICE_NODE
+          });
+        } catch (e) {
+          throw new Error('USB device node exists but not responding');
+        }
+      } else {
+        throw new Error('USB device not found');
+      }
+    
+
+
+     }
+ // broadcastStatus(); 
     } catch (error) {
     if (CAMERA_CONFIGURATION.camera_network.CAMERA_ONLINE) { 
         CAMERA_CONFIGURATION.camera_network.CAMERA_ONLINE = false; 
       console.log("⚠️CHECK_CAMERA_OFFLINE"); 
-      broadcastStatus(); }
+     // broadcastStatus(); 
+    }
 
   }
 
 }
 
-setInterval(CHECK_CAMERA_ONLINE, 5000);
 
+// Test camera connection
+app.get("/api/camera/test", async (req, res) => {
+  console.log("🔍 Testing camera connection...");
+
+  try {
+    if (CAMERA_CONFIGURATION.CAMERA_MODE === 'RTSP') {
+      // Test HTTP-CGI connection
+      const url = `${CAMERA_CONFIGURATION.camera_network.httpCgiBase}/cgi-bin/param.cgi?get_device_conf`;
+      
+      const response = await axios.get(url, {
+        timeout: 5000
+      });
+
+      if (response.status === 200) {
+        CAMERA_CONFIGURATION.camera_network.CAMERA_ONLINE = true;
+        
+        res.json({
+          success: true,
+          online: true,
+          mode: 'RTSP',
+          message: 'Camera is online and responding'
+        });
+      } else {
+        throw new Error('Camera returned non-200 status');
+      }
+
+    } else if (CAMERA_CONFIGURATION.CAMERA_MODE === 'USB') {
+      // Test USB device
+      const deviceExists = fs.existsSync(CAMERA_CONFIGURATION.DEVICE_NODE);
+      
+      if (deviceExists) {
+        try {
+          const output = execSync(
+            `v4l2-ctl -d ${CAMERA_CONFIGURATION.DEVICE_NODE} --list-formats-ext`,
+            { timeout: 3000 }
+          ).toString();
+
+          res.json({
+            success: true,
+            online: true,
+            mode: 'USB',
+            message: 'USB camera detected',
+            device: CAMERA_CONFIGURATION.DEVICE_NODE
+          });
+        } catch (e) {
+          throw new Error('USB device exists but not responding');
+        }
+      } else {
+        throw new Error('USB device not found');
+      }
+    }
+
+  } catch (error) {
+    console.error("❌ Camera test failed:", error);
+    
+    res.json({
+      success: false,
+      online: false,
+      mode: CAMERA_CONFIGURATION.CAMERA_MODE,
+      message: error.message
+    });
+  }
+});
 
 
 // ============================================================================
@@ -453,24 +838,7 @@ app.get("/api/ptz/info/network", async (req, res) => res.json(await cgiRequest("
 app.get("/api/ptz/info/device",  async (req, res) => res.json(await cgiRequest("/cgi-bin/param.cgi?get_device_conf")));
 app.get("/api/ptz/info/serial",  async (req, res) => res.json(await cgiRequest("/cgi-bin/param.cgi?get_serial_number")));
 
-// ============================================================================
-// ROUTE: CAMERA CONFIG (read/update server config)
-// ============================================================================
-app.get("/api/config", (req, res) => {
 
-  res.json({
-
-    camera_ip:    CAMERA_CONFIGURATION.camera_network.ip,
-    rtsp_port:    CAMERA_CONFIGURATION.camera_network.rtspPort,
-    rtsp_path:    CAMERA_CONFIGURATION.camera_network.rtspPath,
-   // webrtc_url:   `http://${req.hostname}:${CONFIG.mediamtx.webRTCPort}/${CONFIG.mediamtx.streamPath}`,
-   // whep_url:     `http://${req.hostname}:${CONFIG.mediamtx.webRTCPort}/${CONFIG.mediamtx.streamPath}/whep`,
-    image_state:  CAMERA_CONFIGURATION.IMAGE_STATE,
-    ptz_state:    CAMERA_CONFIGURATION.PTZ_STATE,
-    camera_online: CAMERA_CONFIGURATION.camera_network.CAMERA_ONLINE,
-  });
-
-});
 
 
 // ============================================================================
@@ -481,7 +849,7 @@ app.get("/api/ptz/home", async (req, res) => {
   console.log("/api/ptz/home REQUES RECIEVE");
   const result = await cgiRequest("/cgi-bin/ptzctrl.cgi?ptzcmd&home" ,`PTZ : home` );
   CAMERA_CONFIGURATION.PTZ_STATE.moving = false;
-  broadcastStatus();
+ // broadcastStatus();
  res.json({ success: result.ok ,data : result.data});
 });
 
@@ -503,7 +871,7 @@ app.get("/api/ptz/stop", async (req, res) => {
   const ts = CAMERA_CONFIGURATION.PTZ_STATE.defaultTiltSpeed;
   const result = await cgiRequest(`/cgi-bin/ptzctrl.cgi?ptzcmd&ptzstop&${ps}&${ts}`);
   CAMERA_CONFIGURATION.PTZ_STATE.moving = false;
-  broadcastStatus();
+ // broadcastStatus();
  res.json({ success: result.ok ,data : result.data});
 });
 
@@ -529,7 +897,7 @@ app.get("/api/ptz/move", async (req, res) => {
   result = await cgiRequest(ep ,`PTZ : ${dir}` );
   CAMERA_CONFIGURATION.PTZ_STATE.moving = dir !== "PTZSTOP";
   }
-  broadcastStatus();
+  //broadcastStatus();
   res.json({ success: result.ok,data : result.data,direction: dir, pan_speed: ps, tilt_speed: ts });
 }); 
 
@@ -667,6 +1035,7 @@ app.get("/api/ptz/preset/call/:id", async (req, res) => {
    res.json({ success: result.ok,data : result.data });
 });
 
+ 
 
 function GET_DATE_TIME_FORMATED() {
   const now = new Date();
@@ -679,6 +1048,7 @@ function GET_DATE_FORMATED() {
   const pad = n => String(n).padStart(2, "0");
   return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
 }
+
 
 function getFreeSpaceMB(mountPoint, callback) {
 
@@ -700,7 +1070,8 @@ function getFreeSpaceMB(mountPoint, callback) {
     const availableMB = Math.floor(availableKB / 1024);
     callback(availableMB);
   });
-}
+
+  }
 
 
 function detectSdCard(callback) {
@@ -757,20 +1128,24 @@ function detectSdCard(callback) {
 }
 
 
-function detectSdCardAsync() {
-  return new Promise(resolve => { detectSdCard((mount, size) => { resolve({ mount, size });});});
-}
+function detectSdCardAsync(){
 
-
-detectSdCard((mount, SIZE) => {
-  if (!mount) {console.error("❌ SD CARD NOT DETECTED");
-  }else{
-    console.error("SD CARD DETECTED AVAILABLE CAPACITY MB:",SIZE);
+  return new Promise(resolve => {
+     detectSdCard((mount, size) => { 
+    if (!mount) {console.error("❌ SD CARD NOT DETECTED");
+  
+    }else{
+    console.error("SD CARD DETECTED AVAILABLE CAPACITY MB:",size);
     app.use("/videos", express.static(path.join(sdMountPoint, "videos")));
+     resolve({ mount, size });
    }
 
-});
+   });});
+      
+     
+}
 
+detectSdCardAsync();
 
 function getUniqueFilePath(dir, baseName, ext){
 
@@ -790,12 +1165,13 @@ function getUniqueFilePath(dir, baseName, ext){
 function getNextSegmentPath(baseFilename) {
   
   const index = RECORDING_STATE.segments.length + 1;
-  const name = `${baseFilename}_part${index}`;
+  const name  = `${baseFilename}seg_part${index}`;
   return getUniqueFilePath(videosDir, name, CAMERA_CONFIGURATION.EXTENSION);
 }
 
 
 // function CAMERA_CONFIGURATION_CAPABILITIES(videoDev, callback){
+
 //   //v4l2-ctl -d /dev/video0 --list-formats-ext
 //   exec(`v4l2-ctl -d /dev/video0 --list-formats-ext`, (err, stdout) => {
 //  // exec(`v4l2-ctl -d ${videoDev} --list-formats-ext`, (err, stdout) => {
@@ -839,66 +1215,6 @@ function getNextSegmentPath(baseFilename) {
 //   });
 // }
 
-app.get("/api/camera/config", (req, res) => {
-
-console.log("GET CAMERA CONFIGURATION  REQUEST:");
-  if (!CAMERA_CONFIGURATION_CAP) {
-     console.error("GET CAMERA CONFIGURATION  REQUEST ERROR:" ,CAMERA_CONFIGURATION_CAP);
-     return res.status(500).json({ error: "CONFIGURATION SETTING FAILED"}); }
- 
-  res.json({
-    current: CAMERA_CONFIGURATION,
-    capabilities: CAMERA_CONFIGURATION_CAP
-  });
-});
-
-
-app.post("/api/camera/config", (req, res) => {
-  let { format, resolution, fps } = req.body;
-  console.log("POST CAMERA CONFIGURATION:", req.body);
-
-  if (!format || !resolution || !fps) {
-    return res.status(400).json({ error: "Missing fields" });
-  }
-
-  // normalize
-  format = format.toUpperCase();
-  fps = Number(fps);
-
-  if (!CAMERA_CONFIGURATION_CAP.formats.includes(format)) {
-    return res.status(400).json({ error: "Invalid format" });
-  }
-
-  if (!CAMERA_CONFIGURATION_CAP.resolutions.includes(resolution)) {
-    return res.status(400).json({ error: "Invalid resolution" });
-  }
-
-  if (!CAMERA_CONFIGURATION_CAP.fps.includes(fps)) {
-    return res.status(400).json({ error: "Invalid FPS" });
-  }
-
-  // derive width/height
-  const [width, height] = resolution.split("x").map(Number);
-
-  // ✅ THIS IS THE IMPORTANT PART
-  CAMERA_CONFIGURATION = {
-    ...CAMERA_CONFIGURATION,   // keep device node, extension
-    format,
-    resolution,
-    fps,
-    width,
-    height,
-    //EXTENSION: format === "H264" ? ".mp4" : ".mkv"
-  };
-
-  console.log("UPDATED CAMERA CONFIG:", CAMERA_CONFIGURATION);
-
-  res.json({
-    message: "CONFIGURATION_SAVED",
-    current: CAMERA_CONFIGURATION
-  });
-});
-
 
 
 app.get("/api/recording/status", (req, res) => {
@@ -909,15 +1225,15 @@ app.get("/api/recording/status", (req, res) => {
     paused: RECORDING_STATE.paused,
     filename: RECORDING_STATE.filename,
     REC_START_TIME: RECORDING_STATE.REC_START_TIME,
-    pausedAt: RECORDING_STATE.pausedAt,
-    totalPausedMs: RECORDING_STATE.totalPausedMs
+    PAUSED_AT_TIME: RECORDING_STATE.PAUSED_AT_TIME,
+    TOT_PAUSED_DURATION_MS: RECORDING_STATE.TOT_PAUSED_DURATION_MS
   });
    console.log("HOME PAGE STATE REQUEST ", res.json );
 });
 
 
 
-async function findCameraPortPath2() {
+async function findCameraPortPath() {
 
   try {
     const lsusbOutput = execSync(`lsusb`).toString();
@@ -1200,6 +1516,9 @@ async function reloadUvcModule() {
 
 
 // Alternative: Rebind all UVC devices
+
+
+
 async function reloadUvcViaRebind() {
   
   console.log("🔄 Rebinding all UVC devices");
@@ -1370,11 +1689,11 @@ async function usbHardReset(){
       return false;
     }
     
-    // Check for usbreset tool
-    if (!fs.existsSync('/usr/local/bin/usbreset')) {
-      console.log("📥 Installing usbreset...");
-      await installUsbreset();
-    }
+    // // Check for usbreset tool
+    // if (!fs.existsSync('/usr/local/bin/usbreset')) {
+    //   console.log("📥 Installing usbreset...");
+    //   await installUsbreset();
+    // }
     
     console.log("🔌 Performing USB hardware reset...");
     execSync(`sudo /usr/local/bin/usbreset ${usbPath}`, { timeout: 5000 });
@@ -1391,7 +1710,6 @@ async function usbHardReset(){
 
 // Helper: Diagnostic check
 async function diagnosticCheck(port) {
-
 
   console.log("\n🔍 DIAGNOSTIC CHECK:");
   console.log("═".repeat(50));
@@ -1473,64 +1791,6 @@ async function diagnosticCheck(port) {
  // console.log("═".repeat(50) + "\n");
 }
 
-// Install usbreset tool
-async function installUsbreset() {
-
-console.log(" installUsbreset...............");
-  try {
-    const code = `
-#include <stdio.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <errno.h>
-#include <sys/ioctl.h>
-#include <linux/usbdevice_fs.h>
-
-int main(int argc, char **argv) {
-    const char *filename;
-    int fd, rc;
-
-    if (argc != 2) {
-        fprintf(stderr, "Usage: usbreset device-filename\\n");
-        return 1;
-    }
-    filename = argv[1];
-
-    fd = open(filename, O_WRONLY);
-    if (fd < 0) {
-        perror("Error opening output file");
-        return 1;
-    }
-
-    printf("Resetting USB device %s\\n", filename);
-    rc = ioctl(fd, USBDEVFS_RESET, 0);
-    if (rc < 0) {
-        perror("Error in ioctl");
-        return 1;
-    }
-    printf("Reset successful\\n");
-
-    close(fd);
-    return 0;
-}
-`;
-
-    fs.writeFileSync('/tmp/usbreset.c', code);
-    execSync('gcc -o /tmp/usbreset /tmp/usbreset.c', { timeout: 5000 });
-    execSync('sudo mv /tmp/usbreset /usr/local/bin/usbreset', { timeout: 2000 });
-    execSync('sudo chmod +x /usr/local/bin/usbreset', { timeout: 2000 });
-    
-    console.log("✅ usbreset installed");
-    return true;
-    
-  } catch (err) {
-    console.error("❌ usbreset install failed:", err.message);
-    return false;
-  }
-}
-
-
-//resetCameraDevice("RE_UN_BIND_USB");
 
  async function checkCameraHealth( print ) {
   try{
@@ -1554,9 +1814,9 @@ async function checkCameraHealth2(){
   }
 
 }
-
 // Run periodic health check
 //setInterval(async () => {checkCameraHealth2() }, 10000); // Every 30 seconds
+
 
 async function waitForCameraReady(maxWaitMs = 5000) {
 
@@ -1594,6 +1854,8 @@ async function waitForCameraReady(maxWaitMs = 5000) {
   console.error("❌ Camera did not become ready");
   return false;
 }
+
+
 
 
 function isCameraDeviceError(msg){
@@ -1731,7 +1993,7 @@ function findMoovEnd(buffer){
 
 
 function RUN_FFMPEG_ARGUMENT_COMMAND({ outputPath = null, enableLive = false }){
-
+  
   FFMPEG_ERROR.result = false;
   FFMPEG_ERROR.reason = "------";
 
@@ -1745,7 +2007,8 @@ function RUN_FFMPEG_ARGUMENT_COMMAND({ outputPath = null, enableLive = false }){
   let args;
  if(CAMERA_CONFIGURATION.CAMERA_MODE === "USB"){
 
-     const videoDev =  findCameraPortPath2();
+     const videoDev =  findCameraPortPath();
+
        if (!videoDev || !videoDev.videoNode){
        console.log(" CAMERA_USB_ERROR_RESET:", videoDev);
        ws.send(JSON.stringify({ type: "ERROR", message: "USB_CAMERA_ERROR" }));
@@ -1837,35 +2100,6 @@ function RUN_FFMPEG_ARGUMENT_COMMAND({ outputPath = null, enableLive = false }){
     // "pipe:1"
 ];
 
-//  if(enableLive && outputPath){
-
-//     console.log("✅ FFMPEG  enableLive && outputPath",outputPath);
-//     args.push(
-//       "-f", "tee",
-//       `[f=mp4:movflags=+faststart]${outputPath}|` + `[f=mp4:movflags=frag_keyframe+empty_moov+default_base_moof:frag_duration=100000]pipe:1`
-//     );
-
-//   }else if(enableLive){
-   
-//     console.log("✅ FFMPEG  enableLive ONLY ");
-
-//     args.push(
-//     "-f", "mp4",
-//     "-movflags", "frag_keyframe+empty_moov+default_base_moof",
-//     "-frag_duration", "100000",   // 100ms fragments
-//     "pipe:1"
-//     );
-
-//   }else if(outputPath){
-    
-//     console.log("✅ FFMPEG  outputPath ONLY");
-//     args.push(
-//     "-f", "mp4",
-//     "-movflags", "+faststart",
-//     outputPath
-//     );
-
-  //}
 
  }else{
     
@@ -1884,116 +2118,6 @@ function RUN_FFMPEG_ARGUMENT_COMMAND({ outputPath = null, enableLive = false }){
       return { success: FFMPEG_ERROR.result, errorId: FFMPEG_ERROR.INVALID_ARGUMENT, reason:FFMPEG_ERROR.reason   };
   }
    
-
-//   if(enableLive && WESOCKET_CONNECTED_FLAG){   //📡LIVE STREAM
-//      console.log("ffmpegProcess LIVE STREAM",WESOCKET_CONNECTED_FLAG); 
-   
-//      mp4Header = null;
-//     initReady = false;
-//     liveClients.forEach(ws => {ws.isInitSent = false;});
-//     initBuffer = Buffer.alloc(0);
-
-//       ffmpegProcess.stdout.on("data", chunk => {
-//        //console.log(" chunk Size:", chunk.length, "bytes"); 
-//       // console.log(" chunk", chunk); 
-
-//        // if (!mp4Header && WESOCKET_SEND_DATA_CONNECTED_FLAG ){
-//       //    mp4Header = chunk;
-//       //    console.log("📦 MP4 header captured (size):", mp4Header.length);
-//       //    console.log("📦 MP4 header captured",mp4Header);
-//       // }
-
-//   if (!initReady && !mp4Header) {
-//          //console.log("chunk Size:", chunk.length, "bytes"); 
-//         // console.log(" chunk", chunk); 
-//          initBuffer = Buffer.concat([initBuffer, chunk]);
-//          const moovEnd = findMoovEnd(initBuffer);
-//         console.log("📦moovEnd  ",moovEnd);
-//       if ( moovEnd){
-//       mp4Header = initBuffer.slice(0, moovEnd);
-//       initReady = true;
-//       console.log("📦 MP4 header captured (size):", mp4Header.length);
-//       console.log("📦 MP4 header captured",mp4Header);
-//       chunk = initBuffer.slice(moovEnd);  // remaining bytes are media data
-//       console.log("📦init left chunk (size)   ",chunk.length);
-//       console.log("📦init left chunk    ",chunk);
-//       initBuffer = null;
-//     } else {
-//      console.log("📦 MP4 moov header pending to moov end ");
-//      return;
-//     }
-//   }
- 
-//  let index = 0;
-//   liveClients.forEach(ws => { 
-
-//     index++;
-//     const info = {
-//       clientNo: index,
-//       readyState: getReadyStateName(ws.readyState) || "unknown",
-//       bufferedAmount: ws.bufferedAmount,
-//       ip: ws._socket?.remoteAddress || "unknown",
-//       port: ws._socket?.remotePort || "unknown"
-//     };
-
-//      if (!ws.isInitSent && mp4Header){
-//           ws.send(mp4Header);
-//           ws.isInitSent = true;
-//           ws.waitForFirstKeyframe = true; // 🔑
-//           console.log("📦 MP4 Init segment sent (late)");
-//           //return;
-//         } 
-
-//      if( ws.isInitSent && WESOCKET_CONNECTED_FLAG && WESOCKET_SEND_DATA_CONNECTED_FLAG ){
-      
-//     if ( ws.readyState === WebSocket.OPEN){// && ws.bufferedAmount < MAX_BUFFER
-//           if(chunk.length > 0){
-//            ws.send(chunk); }
-//         // console.log("🧩 Client Info:", info);
-//       // console.log(`✅ Data sent to client #${index} (${chunk.length} bytes)`); 
-
-//     }else{
-//       console.log(`⚠️ Data NOT sent to client = ${index}  DELETE CLIENT buffer #${ws.bufferedAmount} <  #${MAX_BUFFER}` );
-//       console.log("🧩 Client Info:", info);
-//       deadClients.push(ws);
-//       liveClients.delete(ws);
-//       console.log("AVAILAVLE CLIENT ",liveClients.size,deadClients.length,WESOCKET_CONNECTED_FLAG);
-//     }
-
-//   }else{ 
-//              console.warn(`⚠️ ffmpegProcess Data NOT sent to client #${index} chunck length `,chunk.length);
-//               console.log("🧩 Client Info:", info); 
-//               // deadClients.push(ws);
-//               //liveClients.delete(ws);
-//             console.log("AVAILAVLE CLIENT ",liveClients.size,deadClients.length,"WESOCKET_CONNECTED_FLAG :",WESOCKET_CONNECTED_FLAG, "WESOCKET_SEND_DATA_CONNECTED_FLAG :" ,WESOCKET_SEND_DATA_CONNECTED_FLAG);
-//           } 
-//   });
-
-
-//    //&& deadClients >= 1
-//   if(WESOCKET_CONNECTED_FLAG && liveClients.size == 0 && deadClients.length >= 1){
-
-//          console.log("NO CLIENT AVAILABLE IN WEBSOCKET CLEARING WEBSOCKET ");
-//          deadClients = [];
-
-//      for(const ws of liveClients){
-//          console.log("wss CLOSING WS CLIENT IN RESET ...",liveClients.length);
-
-//         if(ws.readyState === ws.OPEN){
-//           ws.close(1000, "STOP EVENT RESET"); // SERVER ERROR
-//           WESOCKET_CONNECTED_FLAG = false;
-//           if(ffmpegProcess){
-//              killFFmpeg("🛑 NO LIVE CLIENTS → STOPPING LIVE FFMPEG");
-//             }
-//          }
-//       }
-//    }    
-
-//    });
-
-//   }
-
-
 
   ffmpegProcess.stderr.on("data", data => {
 
@@ -2068,7 +2192,6 @@ ffmpegProcess.on('error', (error) => {
 });
 
 
-
   return new Promise((resolve, reject) => {
 
         ffmpegProcess.once("spawn", () => {
@@ -2092,6 +2215,7 @@ ffmpegProcess.on('error', (error) => {
 app.post("/start", async (req, res) => {
   console.log("/start request receive");
   try {
+
      if (RECORDING_STATE.active){
         console.log("/start request RECORDING_ALREADY_RUNNING",RECORDING_STATE.active);
         return res.status(400).json({ error: "RECORDING_ALREADY_RUNNING" });
@@ -2101,7 +2225,7 @@ app.post("/start", async (req, res) => {
       return res.status(400).json({ error: "INVALID_REQUEST_BODY" });
     }
 
-    const { filename } = req.body;
+    const { filename, audio_muted , rec_timer_ms, rec_timer_state } = req.body;
      const FILE_NAME_TEMP = typeof filename === "string" && filename.trim() ? filename.trim() : `video_${GET_DATE_TIME_FORMATED()}`;
 
   
@@ -2112,79 +2236,72 @@ app.post("/start", async (req, res) => {
        return res.status(400).json({ error: "SD_CARD_CAPACITY_FULL" });
     }
 
-   
-       RECORDING_STATE.active = true;
-       
-      // WESOCKET_SEND_DATA_CONNECTED_FLAG = false;
-    //  if(ffmpegProcess && liveClients.size >= 1  && WESOCKET_CONNECTED_FLAG){
-    //   console.log("🔄 Transitioning from live-only to live + recording  Notify clients to expect reconnection");
-    //   notifyLiveClientsclear();
-    // }
-    
       if (ffmpegProcess && !ffmpegStopping){
-      await killFFmpeg("CLEANUP ON NEW RECORDING START");
-     await new Promise(r => setTimeout(r, 1000));
-  }
+          await killFFmpeg("CLEANUP ON NEW RECORDING START");
+          await new Promise(r => setTimeout(r, 1500));
+      }
      
-
- if (ffmpegProcess != null  ){
+    if(ffmpegProcess != null ){
     console.log("CAMERA_ALREADY_RUNNING : ",ffmpegStopping);
-    return res.status(500).json({ error: "CAMERA_ALREADY_RUNNING" });
+    return res.status(500).json({ error: "CAMERA_PROCESS_RUNNING" });
 
   }
-      
-    RECORDING_STATE.segments = [];
+      RESET_DAUFALT_CAMERA_STATE();
+    
     WESOCKET_SEND_DATA_CONNECTED_FLAG = true;
 
-    const outputPath = getUniqueFilePath(videosDir,FILE_NAME_TEMP,CAMERA_CONFIGURATION.EXTENSION );
+    const outputPath = getUniqueFilePath(videosDir,FILE_NAME_TEMP,CAMERA_CONFIGURATION.EXTENSION);
     const segmentPath = getNextSegmentPath(FILE_NAME_TEMP);
-    console.log("FIRST segment path:", segmentPath);
+    console.log("FIRST REC SEGMENT PATH:", segmentPath);
 
     RUN_FFMPEG_ARGUMENT_COMMAND({ enableLive: LIVE_STREAM_ENABLED,outputPath: segmentPath});
    
     setTimeout(() => {
-    console.log("RUN_FFMPEG_ARGUMENT_COMMAND OUTPUT",FFMPEG_ERROR);
-    console.error("START REQUEST RESPOND SEND");
-    
+    //console.log("RUN_FFMPEG_ARGUMENT_COMMAND OUTPUT",FFMPEG_ERROR);
+
     if (!FFMPEG_ERROR.result){
       console.error(" RUN_FFMPEG_ARGUMENT_COMMAND FAILED");
       RECORDING_STATE.active = false;
       return res.status(500).json({success: FFMPEG_ERROR.result,error: "CAMERA_FAILED",reason: FFMPEG_ERROR.reason});
     }else{
+      console.log("▶ RECORDING STARTED");
+    RECORDING_STATE.status = "RECORDING";
     RECORDING_STATE.curr_segment = segmentPath;
     RECORDING_STATE.segments.push(segmentPath);
-    RECORDING_STATE.status = "RECORDING";
     RECORDING_STATE.filename = FILE_NAME_TEMP; 
-    RECORDING_STATE.FINAL_FINAL_NAME = path.basename(outputPath);
-    RECORDING_STATE.folder_name =  GET_DATE_FORMATED();
-    RECORDING_STATE.FINAL_FILE_PATH =  outputPath;//.replace(/\.mkv$/i, ".mp4");;
+    RECORDING_STATE.FINAL_FILE_NAME = path.basename(outputPath);
+    RECORDING_STATE.VIDEO_FOLDER_NAME =  GET_DATE_FORMATED();
+    RECORDING_STATE.FINAL_FILE_SAVE_PATH =  outputPath;  
+    RECORDING_STATE.FINAL_FILE_URL_PATH = path.join( "videos",RECORDING_STATE.VIDEO_FOLDER_NAME, RECORDING_STATE.FINAL_FILE_NAME);
+   
     RECORDING_STATE.active = true;
     RECORDING_STATE.REC_START_TIME = Date.now();
     RECORDING_STATE.paused = false;
-    RECORDING_STATE.pausedAt = null;
-    RECORDING_STATE.totalPausedMs = 0;
+    RECORDING_STATE.PAUSED_AT_TIME = null;
+    RECORDING_STATE.TOT_PAUSED_DURATION_MS = 0;
 
+   console.log("FINAL_FILE_SAVE_PATH : ",RECORDING_STATE.FINAL_FILE_SAVE_PATH);
+       
      return res.json({
       success: true,
-      filename:   RECORDING_STATE.FINAL_FINAL_NAME,
-      foldername : RECORDING_STATE.folder_name,
-      url:       path.join( "videos",RECORDING_STATE.folder_name, RECORDING_STATE.FINAL_FINAL_NAME), //RECORDING_STATE.FINAL_FILE_PATH,
-      state: RECORDING_STATE.status,
+      filename:  RECORDING_STATE.FINAL_FILE_NAME,
+      url:       RECORDING_STATE.FINAL_FILE_URL_PATH,
+      state:     RECORDING_STATE.status,
       RECORDING_STATE :RECORDING_STATE,
-      CAM_CONFIG : null
     });
   }
-    }, 1000); 
+    }, 500); 
     
 
  } catch (err) {
-    console.error("START_FAILED:", err);
-    return res.status(500).json({ error: "START_FAILED" });
+    console.error("START_REC_SERVER_FAILED:", err);
+    return res.status(500).json({ error: "START_REC_SERVER_FAILED" });
   }
 });
 
 
 app.post("/pause", async (req, res) => {
+
   console.log("⏸ PAUSE request received");
 
   if (!RECORDING_STATE.active || RECORDING_STATE.paused) {
@@ -2195,21 +2312,29 @@ app.post("/pause", async (req, res) => {
   try {
 
     RECORDING_STATE.paused = true;
-    RECORDING_STATE.pausedAt = Date.now(); // ✅ freeze timer
+    RECORDING_STATE.PAUSED_AT_TIME = Date.now(); // ✅ freeze timer
     RECORDING_STATE.status = "PAUSED";
 
      if(ffmpegProcess && ffmpegStopping == false ){
          killFFmpeg("PAUSED_STATE STOP FFmpeg...");
-        console.log("⏸ RECORDING PAUSED at", RECORDING_STATE.pausedAt);
+        console.log("⏸ RECORDING PAUSED at", RECORDING_STATE.PAUSED_AT_TIME);
 
-      return res.json({
+    //   return res.json({
+    //   success: true,
+    //   filename:   RECORDING_STATE.FINAL_FILE_NAME,
+    //   foldername : RECORDING_STATE.VIDEO_FOLDER_NAME,
+    //   url:       path.join( "videos",RECORDING_STATE.VIDEO_FOLDER_NAME, RECORDING_STATE.FINAL_FILE_NAME), //RECORDING_STATE.FINAL_FILE_SAVE_PATH,
+    //   state: RECORDING_STATE.status,
+    //   RECORDING_STATE :RECORDING_STATE,
+    //   CAM_CONFIG : null
+    // });
+
+     return res.json({
       success: true,
-      filename:   RECORDING_STATE.FINAL_FINAL_NAME,
-      foldername : RECORDING_STATE.folder_name,
-      url:       path.join( "videos",RECORDING_STATE.folder_name, RECORDING_STATE.FINAL_FINAL_NAME), //RECORDING_STATE.FINAL_FILE_PATH,
-      state: RECORDING_STATE.status,
-      RECORDING_STATE :RECORDING_STATE,
-      CAM_CONFIG : null
+      filename:  RECORDING_STATE.FINAL_FILE_NAME,
+      url:       RECORDING_STATE.FINAL_FILE_URL_PATH,
+      state:     RECORDING_STATE.status,
+      PAUSED_AT_TIME : RECORDING_STATE.PAUSED_AT_TIME
     });
 
     }else{ 
@@ -2238,39 +2363,36 @@ app.post("/resume", (req, res) => {
 
    const baseName = RECORDING_STATE.filename; 
    console.log("RESUME baseName NAME ",baseName);
+
    const segmentPath = getNextSegmentPath(baseName);
    console.error("RESUME NEW SEGMENT NAME ",segmentPath);
-   const pausedDuration = Date.now() - RECORDING_STATE.pausedAt;
-   RECORDING_STATE.curr_segment = segmentPath;
-   RECORDING_STATE.segments.push(segmentPath);
-   RECORDING_STATE.status = "RECORDING";
-   RECORDING_STATE.filename = baseName;
-   RECORDING_STATE.totalPausedMs += pausedDuration;
-   RECORDING_STATE.paused = false;
-   RECORDING_STATE.pausedAt = null; // ✅ VERY IMPORTANT
-   RECORDING_STATE.active = true;
 
-    // if( liveClients.size >= 1  && WESOCKET_CONNECTED_FLAG){
-    //   console.log("🔄 Transitioning from live-only to live + recording Notify clients to expect reconnection");
-    //   notifyLiveClientsclear();
-    // }
-
-   // WESOCKET_SEND_DATA_CONNECTED_FLAG = true;
+   
+    WESOCKET_SEND_DATA_CONNECTED_FLAG = true;
     RUN_FFMPEG_ARGUMENT_COMMAND({ enableLive: LIVE_STREAM_ENABLED,outputPath: segmentPath});
     setTimeout(() => { 
      if (!FFMPEG_ERROR.result){
       console.error(" RUN_FFMPEG_ARGUMENT_COMMAND FAILED");
       return res.status(500).json({success: FFMPEG_ERROR.result,error: "CAMERA_FAILED",reason: FFMPEG_ERROR.reason});
     }else{
+
       console.log("▶ RECORDING RESUMED");
-      return res.json({
+      const pausedDuration = Date.now() - RECORDING_STATE.PAUSED_AT_TIME;
+      RECORDING_STATE.curr_segment = segmentPath;
+      RECORDING_STATE.segments.push(segmentPath);
+      RECORDING_STATE.status = "RECORDING";
+      RECORDING_STATE.filename = baseName;
+      RECORDING_STATE.TOT_PAUSED_DURATION_MS += pausedDuration;
+      RECORDING_STATE.paused = false;
+      RECORDING_STATE.PAUSED_AT_TIME = null; // ✅ VERY IMPORTANT
+      RECORDING_STATE.active = true;
+
+     return res.json({
       success: true,
-      filename:   RECORDING_STATE.FINAL_FINAL_NAME,
-      foldername : RECORDING_STATE.folder_name,
-      url:       path.join( "videos",RECORDING_STATE.folder_name, RECORDING_STATE.FINAL_FINAL_NAME), //RECORDING_STATE.FINAL_FILE_PATH,
-      state: RECORDING_STATE.status,
-      RECORDING_STATE :RECORDING_STATE,
-      CAM_CONFIG : null
+      filename:  RECORDING_STATE.FINAL_FILE_NAME,
+      url:       RECORDING_STATE.FINAL_FILE_URL_PATH,
+      state:     RECORDING_STATE.status,
+      TOT_PAUSED_DURATION_MS : RECORDING_STATE.TOT_PAUSED_DURATION_MS 
     });
   }
     },500); 
@@ -2463,7 +2585,7 @@ app.post("/stop", async (req, res) => {
      }
     await new Promise(r => setTimeout(r, 1000));
 
-    let finalMp4 = RECORDING_STATE.FINAL_FILE_PATH;
+    let finalMp4 = RECORDING_STATE.FINAL_FILE_SAVE_PATH;
     if (!finalMp4.endsWith(".mp4")) {
          finalMp4 += ".mp4";
      }console.log("🎬 Final MP4 PATH :", finalMp4);
@@ -2494,48 +2616,24 @@ app.post("/stop", async (req, res) => {
         console.warn(`⚠️ Could not delete ${path.basename(file)}:`, e.message);
       }
     }
-        // Reset recording state
-       RECORDING_STATE.curr_segment = null;
-       RECORDING_STATE.segments = [];
+  
        RECORDING_STATE.status = "IDLE";
        RECORDING_STATE.active = false;
        RECORDING_STATE.paused = false;
-       RECORDING_STATE.pausedAt = null;
-       RECORDING_STATE.totalPausedMs = 0;
-       RECORDING_STATE.timer_msec = null;
-       RECORDING_STATE.timer_state = "OFF";
-       RECORDING_STATE.audio_mute_flag = false;
+       RECORDING_STATE.PAUSED_AT_TIME = null;
+       RECORDING_STATE.TOT_PAUSED_DURATION_MS = 0;
+      
     
        console.log("🏁 RECORDING COMPLETED");
-      res.json({
+       res.json({
       success: true,
-      filename:   RECORDING_STATE.FINAL_FINAL_NAME,
-      foldername : RECORDING_STATE.folder_name,
-      url:       path.join( "videos",RECORDING_STATE.folder_name, RECORDING_STATE.FINAL_FINAL_NAME), //RECORDING_STATE.FINAL_FILE_PATH,
-      state: RECORDING_STATE.status,
-      RECORDING_STATE :RECORDING_STATE,
-      CAM_CONFIG : null
-      });
+      filename:  RECORDING_STATE.FINAL_FILE_NAME,
+      url:       RECORDING_STATE.FINAL_FILE_URL_PATH,
+      state:     RECORDING_STATE.status,
+      TOT_PAUSED_DURATION_MS : RECORDING_STATE.TOT_PAUSED_DURATION_MS 
+    });
 
-        RECORDING_STATE.filename = null;
-        RECORDING_STATE.folder_name =  null;
-        RECORDING_STATE.REC_START_TIME = null;
-        RECORDING_STATE.REC_STOP_TIME = null;
-        RECORDING_STATE.REC_VIDEO_DURATION  = null;
-        RECORDING_STATE.FINAL_FINAL_NAME = null;
-  
-
-
-    // if (WESOCKET_CONNECTED_FLAG && LIVE_STREAM_ENABLED && liveClients.size >= 1) {
-    //     console.log("🎥 Restarting live stream...");
-    //     ALLOWED_LIVE_FLAG = true;
-    //     // notifyLiveClientsReset();
-    //     for (const ws of liveClients) {
-    //      if(ws.readyState === ws.OPEN) {
-    //       ws.close(1000, "STOP EVENT"); // SERVER ERROR
-    //         }
-    //       }
-    //     }
+        RESET_DAUFALT_CAMERA_STATE();
 
   } catch (err) {
     console.error("STOP FAILED Error type:", err.type ,"Error message:", err.message);
@@ -2550,37 +2648,7 @@ app.post("/stop", async (req, res) => {
       }
     }
 
-    // Reset state
-     RECORDING_STATE.FINAL_FINAL_NAME = null;
-    RECORDING_STATE.curr_segment = null;
-    RECORDING_STATE.status = "IDLE";
-    RECORDING_STATE.active = false;
-    RECORDING_STATE.paused = false;
-    RECORDING_STATE.pausedAt = null;
-    RECORDING_STATE.totalPausedMs = 0;
-    RECORDING_STATE.segments = [];
-    RECORDING_STATE.filename = null;
-    RECORDING_STATE.folder_name = null;
-    RECORDING_STATE.REC_START_TIME = null;
-    RECORDING_STATE.REC_STOP_TIME = null;
-    RECORDING_STATE.REC_VIDEO_DURATION = null;
-    RECORDING_STATE.timer_msec = null;
-    RECORDING_STATE.timer_state = "OFF";
-    RECORDING_STATE.audio_mute_flag = false;
-
-    // // Restart live stream if needed
-    // if (WESOCKET_CONNECTED_FLAG && LIVE_STREAM_ENABLED && liveClients.size >= 1) {
-    //   console.log("🎥 Restarting live stream after error...");
-    //   ALLOWED_LIVE_FLAG = true;
-    //   mp4Header = null;
-    //   for (const ws of liveClients) {
-    //        console.log("wss CLOSING WS CLIENT IN STOP ERROR ...",liveClients.length);
-    //    if (ws.readyState === ws.OPEN) {
-    //       ws.close(1000, "STOP ERROR EVENT"); // SERVER ERROR
-    //    }
-    //   }
-    //  // notifyLiveClientsReset();
-    // }
+    RESET_DAUFALT_CAMERA_STATE();
 
     res.status(500).json({
       error: "STOP_FAILED",
@@ -2592,23 +2660,15 @@ app.post("/stop", async (req, res) => {
 });
 
 
-
 app.post("/reset", async (req, res) => {
 
-      console.log("\n🗑️ reset REQUEST RECIEVE...");
+  console.log("\n🗑️ reset REQUEST RECIEVE...");
    
  try {
 
-  // for (const ws of liveClients){
-  //     console.log("wss CLOSING WS CLIENT IN RESET ...",liveClients.length);
-  //      if (ws.readyState === ws.OPEN) {
-  //         ws.close(1000, "STOP EVENT RESET"); // SERVER ERROR
-  //      }
-  //     }
-
    if (ffmpegProcess  && ffmpegStopping == false){
          killFFmpeg("⛔PAUSE STOP RECORDING");
-        }
+      }
 
     for (const file of RECORDING_STATE.segments){
       try {
@@ -2621,209 +2681,151 @@ app.post("/reset", async (req, res) => {
       }
     }
    
+
     if( segmentListFile && fs.existsSync(segmentListFile)){
        console.log("🗑 Deleted segmentListFile:", segmentListFile);
       fs.unlinkSync(segmentListFile); }
 
+          RESET_DAUFALT_CAMERA_STATE();
+   
+    res.json({
+      success: true,
+      filename:  RECORDING_STATE.FINAL_FILE_NAME,
+      url:       RECORDING_STATE.FINAL_FILE_URL_PATH,
+      state:     RECORDING_STATE.status,
+      TOT_PAUSED_DURATION_MS : RECORDING_STATE.TOT_PAUSED_DURATION_MS 
+    });
 
-     // Reset state
-      RECORDING_STATE.FINAL_FINAL_NAME = null;
-    RECORDING_STATE.curr_segment = null;
-    RECORDING_STATE.status = "IDLE";
-    RECORDING_STATE.active = false;
-    RECORDING_STATE.paused = false;
-    RECORDING_STATE.pausedAt = null;
-    RECORDING_STATE.totalPausedMs = 0;
-    RECORDING_STATE.segments = [];
-    RECORDING_STATE.filename = null;
-    RECORDING_STATE.folder_name = null;
-    RECORDING_STATE.REC_START_TIME = null;
-    RECORDING_STATE.REC_STOP_TIME = null;
-    RECORDING_STATE.REC_VIDEO_DURATION = null;
-    RECORDING_STATE.timer_msec = null;
-    RECORDING_STATE.timer_state = "OFF";
-    RECORDING_STATE.audio_mute_flag = false;
-
-    // if (WESOCKET_CONNECTED_FLAG && LIVE_STREAM_ENABLED && liveClients.size >= 1) {
-    //     console.log("RE STARTED LIVE_STREAM_ENABLED");
-    //     ALLOWED_LIVE_FLAG = true;
-    //      notifyLiveClientsReset();
-    //   }
-       
- res.json({
-        success: true,
-         filename:   ( RECORDING_STATE.filename + CAMERA_CONFIGURATION.EXTENSION),
-       foldername : RECORDING_STATE.folder_name,
-      //  url:       path.join( "videos",RECORDING_STATE.folder_name,(RECORDING_STATE.filename + CAMERA_CONFIGURATION.EXTENSION)), //RECORDING_STATE.FINAL_FILE_PATH,
-        state:     RECORDING_STATE.status,
-        RECORDING_STATE : RECORDING_STATE
-        });
-
-      } catch (err) {  
-              console.log("\n🗑️ reset REQUEST RECIEVE AND FAILED...");
-        res.status(500).json({
-
-      error: "RESET_FAILED",
-      type: err.type || "UNKNOWN",
-      message: err.message,
-      details: err.stderr ? "Check server logs for FFmpeg output" : undefined
-    });    }   
+} catch (err) {  
+        console.log("\n🗑️ reset REQUEST RECIEVE AND FAILED...");
+        res.status(500).json({error: "RESET_FAILED",type: err.type || "UNKNOWN",message: err.message,details: err.stderr ? "Check server logs for FFmpeg output" : undefined});
+          }   
   
 });
 
-let ffmpegClosingPromise = null;
 
-function waitForFFmpegClose() {
 
-  if (!ffmpegProcess) return Promise.resolve();
-  if (!ffmpegClosingPromise) {
-    ffmpegClosingPromise = new Promise(resolve => { ffmpegProcess.once("close", () => { console.log("✅ FFMPEG FULLY CLOSED");
-       // ffmpegProcess = null;
-        ffmpegClosingPromise = null;
-        resolve();
-      });
-    });
-  }
-  return ffmpegClosingPromise;
-}
-wss.on("connection", async (ws, req) => {
+// wss.on("connection", async (ws, req) => {
 
-  console.log("WS CLIENT CONNECTED REQUEST");
-   ws.isInitSent = false;
-  liveClients.add(ws);
-   WESOCKET_CONNECTED_FLAG = true;
-  console.log("wss CONNECT REQ LIVE CLIENT COUNT: ", liveClients.size,RECORDING_STATE.active);
-  // 🚀 If init segment already available, send immediately
-  if (ffmpegProcess && mp4Header && ws.readyState === WebSocket.OPEN && !ws.isInitSent ) {
-  //  ws.send(mp4Header);
-   // ws.isInitSent = true;
-    //console.log("📦 WSS Init mp4Header segment sent to new client",mp4Header);
-  }
+//   console.log("WS CLIENT CONNECTED REQUEST");
+//    ws.isInitSent = false;
+//   liveClients.add(ws);
+//    WESOCKET_CONNECTED_FLAG = true;
+//   console.log("wss CONNECT REQ LIVE CLIENT COUNT: ", liveClients.size,RECORDING_STATE.active);
+//   // 🚀 If init segment already available, send immediately
+//   if (ffmpegProcess && mp4Header && ws.readyState === WebSocket.OPEN && !ws.isInitSent ) {
+//   //  ws.send(mp4Header);
+//    // ws.isInitSent = true;
+//     //console.log("📦 WSS Init mp4Header segment sent to new client",mp4Header);
+//   }
 
-  const clientId = Date.now() + Math.random().toString(36).substr(2, 9);
-  const clientIp = req.socket.remoteAddress;
-  const clientIport  = req.socket.remotePort;
-  const clientIFamily  = req.socket.remoteFamily;
+//   const clientId = Date.now() + Math.random().toString(36).substr(2, 9);
+//   const clientIp = req.socket.remoteAddress;
+//   const clientIport  = req.socket.remotePort;
+//   const clientIFamily  = req.socket.remoteFamily;
   
-  console.log(`\n🔌 WS CLIENT CONNECTED`);
-  console.log(`   ID: ${clientId}`);
-  console.log(`   IP: ${clientIp}`);
-  console.log(`   port: ${clientIport}`);
-  console.log(`   family: ${clientIFamily}`);
+//   console.log(`\n🔌 WS CLIENT CONNECTED`);
+//   console.log(`   ID: ${clientId}`);
+//   console.log(`   IP: ${clientIp}`);
+//   console.log(`   port: ${clientIport}`);
+//   console.log(`   family: ${clientIFamily}`);
 
 
- //🔑 KEY FIX: Don't start new FFmpeg if recording is active
-  ws.onmessage = event => { 
+//  //🔑 KEY FIX: Don't start new FFmpeg if recording is active
+//   ws.onmessage = event => { 
 
-    if (typeof event.data === "string"){
+//     if (typeof event.data === "string"){
 
-        const msg = JSON.parse(event.data);
-        console.log("WSS RECIEVE EVENT MESSAGE",msg);
-        
-        if (msg.type === "STREAM_HEADER"){
-            console.log("🔁 VIDEO HEADER REQ ",msg.message);
-            ws.isInitSent = false;
-            return;
-        }
+//         const msg = JSON.parse(event.data);
+//         console.log("WSS RECIEVE EVENT MESSAGE",msg);
 
-    }
+//         if (msg.type === "STREAM_HEADER"){
+//             console.log("🔁 VIDEO HEADER REQ ",msg.message);
+//             ws.isInitSent = false;
+//             return;
+//         }
 
-  }
+//     }
 
- if(ffmpegStopping && ffmpegProcess){  /// ALWAYS FIRST 
-    console.log("📦 WAIT ffmpegStopping IS TRUE BEFORE STARTING NEW LIVE ",);
-     await new Promise(r => setTimeout(r, 3000));
-  }
+//   }
 
-if (ffmpegProcess || RECORDING_STATE.active){
-    console.log("📺 ALREADY LIVE SESSION STARTED SENDDING MP4 HEADER - NEW CLIENT ADDED");
-    ws.send(JSON.stringify({ type: "STREAM_READY", message: "ALREADY LIVE SESSION STARTED SENDDING MP4 HEADER"}));
-     ws.isInitSent = false;
-    return;
-  }
+//  if(ffmpegStopping && ffmpegProcess){  /// ALWAYS FIRST 
+//     console.log("📦 WAIT ffmpegStopping IS TRUE BEFORE STARTING NEW LIVE ",);
+//      await new Promise(r => setTimeout(r, 3000));
+//   }
+
+// if (ffmpegProcess || RECORDING_STATE.active){
+//     console.log("📺 ALREADY LIVE SESSION STARTED SENDDING MP4 HEADER - NEW CLIENT ADDED");
+//     ws.send(JSON.stringify({ type: "STREAM_READY", message: "ALREADY LIVE SESSION STARTED SENDDING MP4 HEADER"}));
+//      ws.isInitSent = false;
+//     return;
+//   }
 
  
-if ( !ALLOWED_LIVE_FLAG && !ffmpegProcess && RECORDING_STATE.active &&  liveClients.size > 1 ){
-  ALLOWED_LIVE_FLAG = true;
-}
+// if ( !ALLOWED_LIVE_FLAG && !ffmpegProcess && RECORDING_STATE.active &&  liveClients.size > 1 ){
+//   ALLOWED_LIVE_FLAG = true;
+// }
 
-
-if ( ALLOWED_LIVE_FLAG && !ffmpegProcess ){
-  
-  ALLOWED_LIVE_FLAG = false;
-
-  await new Promise(r => setTimeout(r, 500));
+// if ( ALLOWED_LIVE_FLAG && !ffmpegProcess ){
+//   ALLOWED_LIVE_FLAG = false;
+ 
+//   // await new Promise(r => setTimeout(r, 500));
+//   //   const result = RUN_FFMPEG_ARGUMENT_COMMAND({
+//   //     enableLive: true,
+//   //     outputPath: null
+//   //   });
     
-    const result = RUN_FFMPEG_ARGUMENT_COMMAND({
-      enableLive: true,
-      outputPath: null
-    });
-    
-    setTimeout(() => {
-      if (!FFMPEG_ERROR.result){
-        console.error("❌ WSS Failed to start live stream");
-        ws.send(JSON.stringify({ type: "ERROR", message: "Failed to start live stream" }));
-      } else{
-        console.log("✅ WSS LIVE STREAM STARTED");
-        ws.send(JSON.stringify({ type: "STREAM_READY", message: "NEW LIVE SESSION STARTED"}));
-      }
+//   //   setTimeout(() => {
+//   //     if (!FFMPEG_ERROR.result){
+//   //       console.error("❌ WSS Failed to start live stream");
+//   //       ws.send(JSON.stringify({ type: "ERROR", message: "Failed to start live stream" }));
+//   //     } else{
+//   //       console.log("✅ WSS LIVE STREAM STARTED");
+//   //       ws.send(JSON.stringify({ type: "STREAM_READY", message: "NEW LIVE SESSION STARTED"}));
+//   //     }
 
-    }, 1000);
-  }else{ console.log("✅ WSS LIVE STREAM ALREADY REGISTER WAIT TO CLEAN UP ALLOWED_LIVE_FLAG : ",ALLOWED_LIVE_FLAG);    } 
+//   //   }, 1000);
+//   // }else{ console.log("✅ WSS LIVE STREAM ALREADY REGISTER WAIT TO CLEAN UP ALLOWED_LIVE_FLAG : ",ALLOWED_LIVE_FLAG);    } 
   
-  ws.on("close", (code, reason) => {
+//   ws.on("close", (code, reason) => {
   
-    console.log(`\n🔌 WS CLIENT DISCONNECTED`);
-    console.log(`   ID: ${clientId}`);
-    console.log(`   IP: ${clientIp}`);
-   console.log(`   port: ${clientIport}`);
-   console.log(`   family: ${clientIFamily}`);
+//     console.log(`\n🔌 WS CLIENT DISCONNECTED`);
+//     console.log(`   ID: ${clientId}`);
+//     console.log(`   IP: ${clientIp}`);
+//    console.log(`   port: ${clientIport}`);
+//    console.log(`   family: ${clientIFamily}`);
 
-    console.log(`   Code: ${code}`);
-    console.log(`   Reason: ${reason || "none"}`);
+//     console.log(`   Code: ${code}`);
+//     console.log(`   Reason: ${reason || "none"}`);
    
-    liveClients.delete(ws);
-   console.log("wss CLOSE REQ  LIVE CLIENT COUNT:", liveClients.size, RECORDING_STATE.active);
+//     liveClients.delete(ws);
+//    console.log("wss CLOSE REQ  LIVE CLIENT COUNT:", liveClients.size, RECORDING_STATE.active);
    
 
-     if (liveClients.size === 0) {
-         ALLOWED_LIVE_FLAG = true;
-      if (RECORDING_STATE.active){
-        console.log("📹 Recording active - keeping FFmpeg running");
-        WESOCKET_CONNECTED_FLAG = false;
-        mp4Header = null; // Clear header for next connection
-      } else if (ffmpegProcess){
-        WESOCKET_CONNECTED_FLAG = false;
-        killFFmpeg("🛑 NO LIVE CLIENTS → STOPPING LIVE FFMPEG");
-      }
-    }
-  });
+//      if (liveClients.size === 0) {
+//          ALLOWED_LIVE_FLAG = true;
+//       if (RECORDING_STATE.active){
+//         console.log("📹 Recording active - keeping FFmpeg running");
+//         WESOCKET_CONNECTED_FLAG = false;
+//         mp4Header = null; // Clear header for next connection
+//       } else if (ffmpegProcess){
+//         WESOCKET_CONNECTED_FLAG = false;
+//       //  killFFmpeg("🛑 NO LIVE CLIENTS → STOPPING LIVE FFMPEG");
+//       }
+//     }
+//   });
 
- ws.on("error", err => {
-    console.error("WebSocket error:", err);
-    liveClients.delete(ws);
-    ws.terminate();
-  });
+//  ws.on("error", err => {
+//     console.error("WebSocket error:", err);
+//     liveClients.delete(ws);
+//     ws.terminate();
+//   });
 
-});
-
-
+// });
 
 
-function isSafeName(name) {
-  return /^[a-zA-Z0-9._-]+$/.test(name);
-}
-function isSafeName(name) {
-  return /^[a-zA-Z0-9._-]+$/.test(name);
-}
 
 
-function sendError(res, status, code, message, details = {}) {
-  return res.status(status).json({
-    success: false,
-    error: { code, message, details }
-  });
-}
 
 
 app.get("/api/recordings/:folder", (req, res) => {
@@ -2839,7 +2841,7 @@ app.get("/api/recordings/:folder", (req, res) => {
       // 2️⃣ Validate folder name (security)
       const folderName = req.params.folder;
       if (!folderName || folderName.includes("..")) {
-        return res.status(400).json({ error: "INVALID_FOLDER_NAME" });
+        return res.status(400).json({ error: "INVALID_VIDEO_FOLDER_NAME" });
       }
 
       // 3️⃣ Build folder path
@@ -3365,6 +3367,7 @@ function gracefulShutdown(signal) {
 }
 
 function cleanupPort(port) {  //fuser finds which process is using a port and can kill it.
+ 
   try{
     execSync(`sudo fuser -k ${port}/tcp`);
     console.log(`🧹 Cleared port ${port}`);
@@ -3378,7 +3381,6 @@ process.on("SIGTERM", gracefulShutdown); // systemd / OS systemctl stop, reboot
 
 process.on("uncaughtException", err => {
   console.error("💥 UNCAUGHT EXCEPTION:", err);
-  //cleanupPort(PORT);
   gracefulShutdown("uncaughtException");
 });
 
@@ -3404,6 +3406,8 @@ server.listen(PORT, () => {
   console.log(`Camera server running on http://0.0.0.0:${PORT}`);
   startMDNS();
   monitorMDNS();
+  //setInterval(broadcastStatus, 3000);
+  setInterval(CHECK_CAMERA_ONLINE, 5000);
   setTimeout(startMediaMtx, 2000);
 });
 
