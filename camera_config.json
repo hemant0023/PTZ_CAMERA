@@ -17,11 +17,15 @@
     "wdr": false,
     "hue": 7,
     "flip": 0,
-    "mirror": 0
+    "mirror": 0,
+    "brightness_CURRENT": 7,
+    "contrast_CURRENT": 7,
+    "saturation_CURRENT": 7,
+    "sharpness_CURRENT": 7
   },
   "camera_network": {
-    "CAMERA_ONLINE": false,
-    "ip": "192.168.29.54",
+    "CAMERA_ONLINE": true,
+    "ip": "192.168.29.55",
     "subnet_mask": "255.255.255.0",
     "gate_way": "192.168.100.1",
     "DNS_Address": "8.8.8.8",
@@ -37,8 +41,8 @@
     "viscaTcpPort": 5678,
     "viscaUdpPort": 1259,
     "CAMERA_BASE_URL": null,
-    "rtspUrl": "rtsp://admin:admin@192.168.29.54:554/stream1",
-    "httpCgiBase": "http://admin:admin@192.168.29.54"
+    "rtspUrl": "rtsp://admin:admin@192.168.29.55:554/stream1",
+    "httpCgiBase": "http://admin:admin@192.168.29.55"
   },
   "mediamtx": {
     "binary": "./mediamtx",

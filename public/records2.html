@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Recordings - PTZ Camera System</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    :root {
+      --primary: #2563eb;
+      --success: #10b981;
+      --danger: #ef4444;
+      --warning: #f59e0b;
+      --bg-primary: #f8fafc;
+      --bg-secondary: #ffffff;
+      --bg-tertiary: #f1f5f9;
+      --text-primary: #0f172a;
+      --text-secondary: #475569;
+      --border: #e2e8f0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      min-height: 100vh;
+    }
+
+    /* Navbar */
+    .navbar {
+      background: var(--bg-secondary);
+      border-bottom: 1px solid var(--border);
+      padding: 16px 32px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+
+    .logo {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--primary);
+      margin-bottom: 12px;
+    }
+
+    .nav-links {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .nav-a {
+      padding: 8px 16px;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text-secondary);
+      text-decoration: none;
+      font-weight: 500;
+      font-size: 13px;
+      transition: all 0.2s;
+    }
+
+    .nav-a:hover {
+      background: var(--primary);
+      color: white;
+      border-color: var(--primary);
+    }
+
+    .nav-a.active {
+      background: var(--primary);
+      color: white;
+      border-color: var(--primary);
+    }
+
+    /* Container */
+    .container {
+      max-width: 1600px;
+      margin: 24px auto;
+      padding: 0 24px;
+    }
+
+    /* Header */
+    .page-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 24px;
+    }
+
+    h1 {
+      font-size: 28px;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+
+    /* Path Bar */
+    .path-bar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 20px;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      margin-bottom: 20px;
+    }
+
+    #backBtn {
+      padding: 8px 16px;
+      background: var(--primary);
+      color: white;
+      border: none;
+      border-radius: 6px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    #backBtn:hover {
+      background: #1d4ed8;
+    }
+
+    #pathLabel {
+      font-weight: 600;
+      color: var(--text-secondary);
+      font-family: monospace;
+    }
+
+    /* Filter Bar */
+    .filter-bar {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+
+    .filter-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+
+    .filter-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .filter-label {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-secondary);
+    }
+
+    .filter-control {
+      padding: 8px 12px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--bg-secondary);
+      color: var(--text-primary);
+      font-size: 14px;
+      transition: all 0.2s;
+    }
+
+    .filter-control:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+    }
+
+    .filter-actions {
+      display: flex;
+      gap: 8px;
+      justify-content: flex-end;
+    }
+
+    .btn {
+      padding: 8px 16px;
+      border: none;
+      border-radius: 6px;
+      font-weight: 600;
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      color: white;
+    }
+
+    .btn-secondary {
+      background: var(--bg-tertiary);
+      color: var(--text-primary);
+      border: 1px solid var(--border);
+    }
+
+    .btn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+
+    /* Stats Cards */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    .stat-card {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+    }
+
+    .stat-label {
+      font-size: 12px;
+      color: var(--text-secondary);
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+
+    .stat-value {
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--primary);
+    }
+
+    /* Table Container */
+    .table-container {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    }
+
+    .table-header {
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .table-title {
+      font-size: 16px;
+      font-weight: 700;
+    }
+
+    .table-scroll {
+      overflow-x: auto;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    thead {
+      background: var(--bg-tertiary);
+      border-bottom: 2px solid var(--border);
+    }
+
+    th {
+      padding: 12px 16px;
+      text-align: left;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text-primary);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    th:hover {
+      background: var(--border);
+    }
+
+    th .sort-icon {
+      margin-left: 4px;
+      opacity: 0.3;
+    }
+
+    th.sorted-asc .sort-icon::after {
+      content: ' ▲';
+      opacity: 1;
+    }
+
+    th.sorted-desc .sort-icon::after {
+      content: ' ▼';
+      opacity: 1;
+    }
+
+    td {
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--border);
+      color: var(--text-secondary);
+      font-size: 14px;
+    }
+
+    tbody tr:hover {
+      background: var(--bg-tertiary);
+    }
+
+    tbody tr:last-child td {
+      border-bottom: none;
+    }
+
+    .folder-row {
+      cursor: pointer;
+    }
+
+    .folder-icon {
+      font-size: 18px;
+      margin-right: 8px;
+    }
+
+    .video-name {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    /* Action Buttons */
+    .action-buttons {
+      display: flex;
+      gap: 8px;
+    }
+
+    .action-btn {
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      text-decoration: none;
+      display: inline-block;
+    }
+
+    .btn-play {
+      background: var(--success);
+      color: white;
+      border: none;
+    }
+
+    .btn-download {
+      background: var(--primary);
+      color: white;
+      border: none;
+    }
+
+    .action-btn:hover {
+      transform: scale(1.05);
+      box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    }
+
+    /* Badge */
+    .badge {
+      padding: 4px 10px;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 600;
+      display: inline-block;
+    }
+
+    .badge-primary {
+      background: rgba(37, 99, 235, 0.1);
+      color: var(--primary);
+    }
+
+    .badge-success {
+      background: rgba(16, 185, 129, 0.1);
+      color: var(--success);
+    }
+
+    /* Modal */
+    .modal {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.8);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .modal.show {
+      display: flex;
+    }
+
+    .modal-content {
+      background: var(--bg-secondary);
+      border-radius: 12px;
+      max-width: 900px;
+      width: 90%;
+      max-height: 90vh;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .modal-video {
+      width: 100%;
+      max-height: 600px;
+      background: #000;
+    }
+
+    .modal-close {
+      position: absolute;
+      top: 16px;
+      right: 16px;
+      padding: 8px 16px;
+      background: var(--danger);
+      color: white;
+      border: none;
+      border-radius: 6px;
+      font-weight: 600;
+      cursor: pointer;
+      z-index: 10;
+    }
+
+    /* Empty State */
+    .empty-state {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--text-secondary);
+    }
+
+    .empty-icon {
+      font-size: 64px;
+      margin-bottom: 16px;
+      opacity: 0.5;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    /* Responsive */
+    @media (max-width: 1024px) {
+      .filter-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+      
+      .stats-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+
+    @media (max-width: 768px) {
+      .filter-grid {
+        grid-template-columns: 1fr;
+      }
+      
+      .stats-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .table-scroll {
+        overflow-x: scroll;
+      }
+
+      .action-buttons {
+        flex-direction: column;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Navbar -->
+  <nav class="navbar">
+    <div class="logo">📷 PTZ Camera System</div>
+    <div class="nav-links">
+      <a href="index.html" class="nav-a">🎥 Live View</a>
+      <a href="config2.html" class="nav-a">⚡ Configuration</a>
+      <a href="records2.html" class="nav-a active">📁 Records</a>
+    </div>
+  </nav>
+
+  <!-- Container -->
+  <div class="container">
+
+    <!-- Page Header -->
+    <div class="page-header">
+      <h1>📁 Recording Library</h1>
+    </div>
+
+    <!-- Path Bar -->
+    <div class="path-bar">
+      <button id="backBtn" class="hidden">⬅ Back</button>
+      <span id="pathLabel">/videos</span>
+    </div>
+
+    <!-- Stats (shown on folder view) -->
+    <div id="statsSection" class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-label">Total Folders</div>
+        <div class="stat-value" id="totalFolders">0</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Total Videos</div>
+        <div class="stat-value" id="totalVideos">0</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Total Size</div>
+        <div class="stat-value" id="totalSize">0 GB</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Latest Recording</div>
+        <div class="stat-value" id="latestRecording" style="font-size: 14px;">--</div>
+      </div>
+    </div>
+
+    <!-- Filter Bar (shown on video view) -->
+    <div id="filterBar" class="filter-bar hidden">
+      <div class="filter-grid">
+        <div class="filter-group">
+          <label class="filter-label">Search by Name</label>
+          <input type="text" id="filterName" class="filter-control" placeholder="Enter video name...">
+        </div>
+        <div class="filter-group">
+          <label class="filter-label">From Date</label>
+          <input type="date" id="filterDateFrom" class="filter-control">
+        </div>
+        <div class="filter-group">
+          <label class="filter-label">To Date</label>
+          <input type="date" id="filterDateTo" class="filter-control">
+        </div>
+        <div class="filter-group">
+          <label class="filter-label">Min Size (MB)</label>
+          <input type="number" id="filterMinSize" class="filter-control" placeholder="0">
+        </div>
+      </div>
+      <div class="filter-actions">
+        <button class="btn btn-secondary" id="clearFilters">Clear Filters</button>
+        <button class="btn btn-primary" id="applyFilters">Apply Filters</button>
+      </div>
+    </div>
+
+    <!-- Table -->
+    <div class="table-container">
+      <div class="table-header">
+        <div class="table-title" id="tableTitle">Folders</div>
+        <div id="videoCount" class="hidden"></div>
+      </div>
+      <div class="table-scroll">
+        <table id="recordsTable">
+          <!-- Content will be generated by JavaScript -->
+        </table>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Video Modal -->
+  <div id="videoModal" class="modal">
+    <div class="modal-content">
+      <button class="modal-close" onclick="closePlayer()">✕ Close</button>
+      <video id="videoPlayer" class="modal-video" controls></video>
+    </div>
+  </div>
+
+  <script src="js/records.js"></script>
+
+</body>
+</html>

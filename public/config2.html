@@ -1,0 +1,785 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Camera Configuration - PTZ System</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    :root {
+      --primary: #2563eb;
+      --success: #10b981;
+      --danger: #ef4444;
+      --warning: #f59e0b;
+      --bg-primary: #f8fafc;
+      --bg-secondary: #ffffff;
+      --bg-tertiary: #f1f5f9;
+      --text-primary: #0f172a;
+      --text-secondary: #475569;
+      --border: #e2e8f0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      min-height: 100vh;
+    }
+
+    /* Navbar */
+    .navbar {
+      background: var(--bg-secondary);
+      border-bottom: 1px solid var(--border);
+      padding: 16px 32px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+
+    .logo {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--primary);
+      margin-bottom: 12px;
+    }
+
+    .nav-links {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .nav-a {
+      padding: 8px 16px;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text-secondary);
+      text-decoration: none;
+      font-weight: 500;
+      font-size: 13px;
+      transition: all 0.2s;
+    }
+
+    .nav-a:hover {
+      background: var(--primary);
+      color: white;
+      border-color: var(--primary);
+    }
+
+    .nav-a.active {
+      background: var(--primary);
+      color: white;
+      border-color: var(--primary);
+    }
+
+    /* Page */
+    .page {
+      max-width: 1400px;
+      margin: 24px auto;
+      padding: 0 24px;
+    }
+
+    .page-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 24px;
+    }
+
+    h1 {
+      font-size: 28px;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+
+    /* Connection Badge */
+    .connection-badge {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 16px;
+      background: #d1fae5;
+      border: 1px solid #10b981;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      color: #065f46;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #10b981;
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    /* Tabs */
+    .tabs {
+      display: flex;
+      gap: 4px;
+      border-bottom: 2px solid var(--border);
+      margin-bottom: 24px;
+      background: var(--bg-secondary);
+      padding: 8px 8px 0;
+      border-radius: 8px 8px 0 0;
+    }
+
+    .tab {
+      padding: 12px 24px;
+      background: transparent;
+      border: none;
+      color: var(--text-secondary);
+      font-weight: 600;
+      cursor: pointer;
+      border-bottom: 3px solid transparent;
+      transition: all 0.2s;
+      font-size: 14px;
+    }
+
+    .tab:hover {
+      color: var(--primary);
+      background: var(--bg-tertiary);
+    }
+
+    .tab.active {
+      color: var(--primary);
+      border-bottom-color: var(--primary);
+    }
+
+    /* Tab Content */
+    .tab-content {
+      display: none;
+    }
+
+    .tab-content.active {
+      display: block;
+      animation: fadeIn 0.3s;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Grid */
+    .config-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 20px;
+    }
+
+    /* Card */
+    .card {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 24px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 20px;
+      padding-bottom: 16px;
+      border-bottom: 2px solid var(--border);
+    }
+
+    .card-icon {
+      font-size: 24px;
+    }
+
+    .card-title {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+
+    /* Form */
+    .form-group {
+      margin-bottom: 20px;
+    }
+
+    .form-label {
+      display: block;
+      margin-bottom: 8px;
+      font-weight: 600;
+      color: var(--text-primary);
+      font-size: 13px;
+    }
+
+    .form-control {
+      width: 100%;
+      padding: 10px 14px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--bg-secondary);
+      color: var(--text-primary);
+      font-size: 14px;
+      transition: all 0.2s;
+    }
+
+    .form-control:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+    }
+
+    select.form-control {
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12'%3E%3Cpath fill='%230f172a' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 12px center;
+      padding-right: 36px;
+    }
+
+    .form-row {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 16px;
+    }
+
+    /* Slider */
+    .slider-group {
+      margin-bottom: 20px;
+    }
+
+    .slider-label {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 8px;
+    }
+
+    .slider-value {
+      font-weight: 700;
+      color: var(--primary);
+      font-family: monospace;
+    }
+
+    input[type="range"] {
+      -webkit-appearance: none;
+      width: 100%;
+      height: 8px;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      outline: none;
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 20px;
+      height: 20px;
+      background: var(--primary);
+      border: 3px solid white;
+      border-radius: 50%;
+      cursor: pointer;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    }
+
+    /* Radio */
+    .radio-group {
+      display: flex;
+      gap: 16px;
+    }
+
+    .radio-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .radio-item input[type="radio"] {
+      width: 18px;
+      height: 18px;
+      accent-color: var(--primary);
+    }
+
+    /* Buttons */
+    .btn {
+      padding: 10px 20px;
+      border: none;
+      border-radius: 6px;
+      font-weight: 600;
+      font-size: 14px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      color: white;
+    }
+
+    .btn-primary:hover {
+      background: #1d4ed8;
+    }
+
+    .btn-success {
+      background: var(--success);
+      color: white;
+    }
+
+    .btn-danger {
+      background: var(--danger);
+      color: white;
+    }
+
+    .btn-group {
+      display: flex;
+      gap: 12px;
+      margin-top: 24px;
+    }
+
+    /* Status Message */
+    .status-message {
+      padding: 14px 18px;
+      border-radius: 8px;
+      margin-top: 20px;
+      display: none;
+      font-weight: 500;
+    }
+
+    .status-message.success {
+      background: #d1fae5;
+      color: #065f46;
+      border: 1px solid #10b981;
+    }
+
+    .status-message.error {
+      background: #fee2e2;
+      color: #991b1b;
+      border: 1px solid #ef4444;
+    }
+
+    /* Info Grid */
+    .info-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+    }
+
+    .info-item {
+      padding: 12px;
+      background: var(--bg-tertiary);
+      border-radius: 8px;
+      border: 1px solid var(--border);
+    }
+
+    .info-label {
+      font-size: 11px;
+      color: var(--text-secondary);
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+
+    .info-value {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--text-primary);
+      font-family: monospace;
+    }
+
+    .hidden {
+      display: none;
+    }
+
+    /* Responsive */
+    @media (max-width: 1024px) {
+      .config-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 768px) {
+      .tabs {
+        overflow-x: auto;
+      }
+      
+      .form-row {
+        grid-template-columns: 1fr;
+      }
+      
+      .btn-group {
+        flex-direction: column;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Navbar -->
+  <nav class="navbar">
+    <div class="logo">📷 PTZ Camera System</div>
+    <div class="nav-links">
+      <a href="index2.html" class="nav-a">🎥 Live View</a>
+      <a href="config2.html" class="nav-a active">⚡ Configuration</a>
+      <a href="records2.html" class="nav-a">📁 Records</a>
+    </div>
+  </nav>
+
+  <!-- Page -->
+  <div class="page">
+    
+    <!-- Header -->
+    <div class="page-header">
+      <h1>⚙️CONFIGURATION</h1>
+      <div class="connection-badge" id="cameraStatus">
+        <span class="status-dot"></span>
+        <span>Checking...</span>
+      </div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="tabs">
+      <button class="tab active" onclick="switchTab('general')">🎬 General</button>
+      <button class="tab" onclick="switchTab('video')">📹 Video</button>
+      <button class="tab" onclick="switchTab('image')">🎨 Image</button>
+      <button class="tab" onclick="switchTab('ptz')">🎯 PTZ</button>
+      <button class="tab" onclick="switchTab('zoom')">🔍 Zoom</button>
+      <button class="tab" onclick="switchTab('network')">🌐 Network</button>
+    </div>
+
+    <!-- Tab: General -->
+    <div id="tab-general" class="tab-content active">
+      <div class="config-grid">
+        
+        <div class="card">
+          <div class="card-header">
+            <span class="card-icon">📹</span>
+            <span class="card-title">Camera Mode</span>
+          </div>
+          
+          <div class="form-group">
+            <label class="form-label">Operating Mode</label>
+            <div class="radio-group">
+              <label class="radio-item">
+                <input type="radio" name="cameraMode" value="RTSP" checked>
+                <span>RTSP (Network)</span>
+              </label>
+              <label class="radio-item">
+                <input type="radio" name="cameraMode" value="USB">
+                <span>USB (Direct)</span>
+              </label>
+            </div>
+          </div>
+
+          <div id="usbSettings" class="hidden">
+            <div class="form-group">
+              <label class="form-label">Device Node</label>
+              <input type="text" class="form-control" id="deviceNode" value="/dev/video0">
+            </div>
+          </div>
+
+          <div id="rtspSettings">
+            <div class="form-group">
+              <label class="form-label">Camera IP Address</label>
+              <input type="text" class="form-control" id="cameraIP" placeholder="192.168.29.54">
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">RTSP Port</label>
+                <input type="number" class="form-control" id="rtspPort" value="554">
+              </div>
+              <div class="form-group">
+                <label class="form-label">HTTP Port</label>
+                <input type="number" class="form-control" id="httpPort" value="80">
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Stream Path</label>
+              <input type="text" class="form-control" id="rtspPath" placeholder="/stream1">
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">Username</label>
+                <input type="text" class="form-control" id="httpUser" placeholder="admin">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Password</label>
+                <input type="password" class="form-control" id="httpPass" placeholder="password">
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <span class="card-icon">📊</span>
+            <span class="card-title">Current Status</span>
+          </div>
+          
+          <div class="info-grid">
+            <div class="info-item">
+              <div class="info-label">Mode</div>
+              <div class="info-value" id="currentMode">--</div>
+            </div>
+            <div class="info-item">
+              <div class="info-label">Resolution</div>
+              <div class="info-value" id="currentResolution">--</div>
+            </div>
+            <div class="info-item">
+              <div class="info-label">FPS</div>
+              <div class="info-value" id="currentFPS">--</div>
+            </div>
+            <div class="info-item">
+              <div class="info-label">Format</div>
+              <div class="info-value" id="currentFormat">--</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Tab: Video -->
+    <div id="tab-video" class="tab-content">
+      <div class="config-grid">
+        
+        <div class="card">
+          <div class="card-header">
+            <span class="card-icon">🎬</span>
+            <span class="card-title">Video Settings</span>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Video Format</label>
+            <select class="form-control" id="format">
+              <option value="H264">H.264 (Recommended)</option>
+              <option value="MJPEG">MJPEG</option>
+              <option value="YUYV">YUYV</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Resolution</label>
+            <select class="form-control" id="resolution"></select>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Frame Rate</label>
+              <select class="form-control" id="fps"></select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Bitrate</label>
+              <select class="form-control" id="bitrate"></select>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">File Extension</label>
+            <select class="form-control" id="extension">
+              <option value=".mp4">MP4 (Recommended)</option>
+              <option value=".mkv">MKV</option>
+            </select>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Tab: Image -->
+    <div id="tab-image" class="tab-content">
+      <div class="config-grid">
+        
+        <div class="card">
+          <div class="card-header">
+            <span class="card-icon">🎨</span>
+            <span class="card-title">Image Controls</span>
+          </div>
+
+          <div class="slider-group">
+            <div class="slider-label">
+              <label class="form-label">Brightness</label>
+              <span class="slider-value" id="brightnessVal">7</span>
+            </div>
+            <input type="range" id="brightness" min="0" max="14" value="7">
+          </div>
+
+          <div class="slider-group">
+            <div class="slider-label">
+              <label class="form-label">Contrast</label>
+              <span class="slider-value" id="contrastVal">7</span>
+            </div>
+            <input type="range" id="contrast" min="0" max="14" value="7">
+          </div>
+
+          <div class="slider-group">
+            <div class="slider-label">
+              <label class="form-label">Saturation</label>
+              <span class="slider-value" id="saturationVal">6</span>
+            </div>
+            <input type="range" id="saturation" min="0" max="14" value="6">
+          </div>
+
+          <div class="slider-group">
+            <div class="slider-label">
+              <label class="form-label">Sharpness</label>
+              <span class="slider-value" id="sharpnessVal">7</span>
+            </div>
+            <input type="range" id="sharpness" min="0" max="14" value="7">
+          </div>
+
+          <div class="slider-group">
+            <div class="slider-label">
+              <label class="form-label">Hue</label>
+              <span class="slider-value" id="hueVal">7</span>
+            </div>
+            <input type="range" id="hue" min="0" max="14" value="7">
+          </div>
+
+          <button class="btn btn-primary" id="resetImageBtn">↺ Reset to Defaults</button>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Tab: PTZ -->
+    <div id="tab-ptz" class="tab-content">
+      <div class="config-grid">
+        
+        <div class="card">
+          <div class="card-header">
+            <span class="card-icon">🎯</span>
+            <span class="card-title">PTZ Speeds</span>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Pan Speed (1-24)</label>
+              <input type="number" class="form-control" id="panSpeed" min="1" max="24" value="12">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Tilt Speed (1-20)</label>
+              <input type="number" class="form-control" id="tiltSpeed" min="1" max="20" value="10">
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Zoom Speed (1-7)</label>
+              <input type="number" class="form-control" id="zoomSpeed" min="1" max="7" value="4">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Focus Speed (1-7)</label>
+              <input type="number" class="form-control" id="focusSpeed" min="1" max="7" value="4">
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Tab: Zoom -->
+    <div id="tab-zoom" class="tab-content">
+      <div class="config-grid">
+        
+        <div class="card">
+          <div class="card-header">
+            <span class="card-icon">🔍</span>
+            <span class="card-title">Fixed Zoom Configuration</span>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Zoom In Step</label>
+              <input type="number" class="form-control" id="zoomInFixed" min="1" max="20" value="5">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Zoom Out Step</label>
+              <input type="number" class="form-control" id="zoomOutFixed" min="1" max="20" value="5">
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Position Step (Hex)</label>
+            <input type="text" class="form-control" id="ptzPositionStep" value="0005" pattern="[0-9A-Fa-f]{4}">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Info</label>
+            <p style="color: var(--text-secondary); font-size: 13px;">
+              Fixed zoom steps are used when clicking zoom in/out buttons. Position step is used for PTZ absolute positioning (hex value, 4 digits).
+            </p>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Tab: Network -->
+    <div id="tab-network" class="tab-content">
+      <div class="config-grid">
+        
+        <div class="card">
+          <div class="card-header">
+            <span class="card-icon">🌐</span>
+            <span class="card-title">Network Configuration</span>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Subnet Mask</label>
+            <input type="text" class="form-control" id="subnetMask" placeholder="255.255.255.0">
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Gateway</label>
+              <input type="text" class="form-control" id="gateway" placeholder="192.168.100.1">
+            </div>
+            <div class="form-group">
+              <label class="form-label">DNS Server</label>
+              <input type="text" class="form-control" id="dns" placeholder="8.8.8.8">
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">MAC Address</label>
+            <input type="text" class="form-control" id="macAddress" readonly>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">TCP Port</label>
+              <input type="number" class="form-control" id="tcpPort" value="5678">
+            </div>
+            <div class="form-group">
+              <label class="form-label">UDP Port</label>
+              <input type="number" class="form-control" id="udpPort" value="1259">
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Action Buttons -->
+    <div class="btn-group">
+      <button class="btn btn-primary" id="saveConfigBtn">💾 Save Configuration</button>
+      <button class="btn btn-danger" id="resetBtn">↺ Reset to Defaults</button>
+    </div>
+
+    <!-- Status Message -->
+    <div class="status-message" id="statusMessage"></div>
+
+  </div>
+
+  <script src="js/config.js"></script>
+
+</body>
+</html>

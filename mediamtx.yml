@@ -59,7 +59,7 @@ pathDefaults:
 # =========================
 paths:
   live_camera:
-    source: rtsp://admin:admin@192.168.29.54:554/stream1
+    source: rtsp://admin:admin@192.168.29.55:554/stream1
     rtspTransport: tcp
     sourceOnDemand: no
 

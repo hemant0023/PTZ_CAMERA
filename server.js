@@ -30,6 +30,7 @@ const axios = require('axios');
 const cors = require('cors');
 const { Console } = require("console");
 const e = require("express");
+const { rejects } = require("assert");
 
 app.use(cors({
  origin: "*" ,//true,
@@ -81,13 +82,24 @@ let CAMERA_CONFIGURATION = {
    fps: 30, //5,15,30,50,60
    bitrate: "4M",
    EXTENSION: ".mp4",      // mkv | mp4
-   
+
+   ZOOM_IN_FIXED : 5, // for fixed zoom commands (e.g. zoom in/out by 5 steps)
+   ZOOM_OUT_FIXED : 5, // for fixed zoom commands (e.g. zoom in/out by 5 steps)
+
+   PTZ_POSITION_STEP: "0005", // for absolute/relative position commands (e.g. move pan/tilt by 5 steps)
+   PTZ_MULTIPLE_POSITION_STEP: ["0010", "0020", "0050"], // for absolute/relative position commands (e.g. move pan/tilt by 10 steps)
+
   IMAGE_SETTINGS : {
 
-  brightness: 7,
-  contrast: 7,
-  saturation: 6,
-  sharpness: 7,
+  brightness_DEFAULT: 7,
+  contrast_DEFAULT: 7,
+  saturation_DEFAULT: 6,
+  sharpness_DEFAULT: 7,
+  brightness_CURRENT: 7,
+  contrast_CURRENT: 7,
+  saturation_CURRENT: 6,
+  sharpness_CURRENT: 7,
+
   whiteBalance: "auto",
   exposure: "auto",
   backlight: false,
@@ -100,7 +112,7 @@ let CAMERA_CONFIGURATION = {
   camera_network: {
 
     CAMERA_ONLINE:false,
-    ip:           "192.168.29.54",   // ← your camera IP
+    ip:           "192.168.29.55",   // ← your camera IP
     subnet_mask:  "255.255.255.0",
     gate_way:     "192.168.100.1",
     DNS_Address:  "8.8.8.8",
@@ -120,6 +132,18 @@ let CAMERA_CONFIGURATION = {
     httpCgiBase:  null,              // built below
 
   },
+
+ SYSTEM_NETWORK: {
+    CONNECT_SYSTEM_NETWORK : "WIFI", // ETHERNET or WIFI 
+    SYSTEM_NETWORK_MODE: "DHCP",     // DHCP or STATIC
+    IP_ADDRESS :  "192.168.29.54",   // ← your camera IP
+    GATE_WAY:     "192.168.100.1",
+    DNS_Address:  "8.8.8.8",
+    WIFI_SSID:  "KHADAS",
+    WIFI_PASSWORD: "KHADAS@1234",
+  },
+
+
 
   mediamtx: {
     binary:    "./mediamtx",  // path to MediaMTX binary
@@ -160,8 +184,9 @@ CAMERA_CONFIGURATION_CAP = {
   EXTENSION : [".mp4",".mkv"]
 };
 
+
+
 let RECORDING_STATE = {
-  
   status: "IDLE",
   active: false,
   paused: false,
@@ -179,14 +204,13 @@ let RECORDING_STATE = {
   PAUSED_AT_TIME:     null,
   TOT_PAUSED_DURATION_MS: 0,
   FINAL_FILE_URL_PATH : null,
-
   segments: [], 
   curr_segment: null
 
 };
+
  
 let FFMPEG_ERROR = {
-
   result: null,
   reason: null,
   SPAWN_FAILED:     1,
@@ -229,24 +253,45 @@ function RESET_DAUFALT_CAMERA_STATE(){
     FFMPEG_ERROR.result = null;
 }
 
+function CAMERA_STATE_STATUS(){
+
+  let CAMERA_STATE_STATUS = { 
+    STATUS: RECORDING_STATE.status,
+    ACTIVE: RECORDING_STATE.active,
+    PAUSED: RECORDING_STATE.paused,
+    REC_START_TIME: RECORDING_STATE.REC_START_TIME,
+    PAUSED_AT_TIME: RECORDING_STATE.PAUSED_AT_TIME,
+    REC_VIDEO_DURATION: RECORDING_STATE.REC_VIDEO_DURATION,
+    TOT_PAUSED_DURATION_MS: RECORDING_STATE.TOT_PAUSED_DURATION_MS,
+    
+    VIDEO_FOLDER_NAME:   RECORDING_STATE.VIDEO_FOLDER_NAME,
+    FINAL_FILE_NAME:     RECORDING_STATE.FINAL_FILE_NAME ,
+    FINAL_FILE_URL_PATH: RECORDING_STATE.FINAL_FILE_URL_PATH,
+
+    REC_TIMER_MS: RECORDING_STATE.REC_TIMER_MS,
+    REC_TIMER_STATE: RECORDING_STATE.REC_TIMER_STATE,
+    AUDIO_MUTED_FLAG: RECORDING_STATE.AUDIO_MUTED_FLAG
+  }
+
+  return CAMERA_STATE_STATUS;
+}
+
+
+app.get("/api/recording/status", (req, res) => {
+  res.json({status: CAMERA_STATE_STATUS()});
+   console.log("HOME PAGE STATE REQUEST ", res.json );
+});
+
+
 app.get("/api/camera/config", (req, res) => {
 
   console.log("GET CAMERA CONFIGURATION REQUEST");
   
-  if (!CAMERA_CONFIGURATION_CAP) {
+  if ( !CAMERA_CONFIGURATION || !CAMERA_CONFIGURATION_CAP) {
     console.error("GET CAMERA CONFIGURATION ERROR:", CAMERA_CONFIGURATION_CAP);
     return res.status(500).json({ error: "CONFIGURATION_SETTING_FAILED" });
   }
  
-  // Build RTSP URL dynamically
-  if (CAMERA_CONFIGURATION.camera_network) {
-    CAMERA_CONFIGURATION.camera_network.rtspUrl = 
-      `rtsp://${CAMERA_CONFIGURATION.camera_network.httpUser}:${CAMERA_CONFIGURATION.camera_network.httpPass}@${CAMERA_CONFIGURATION.camera_network.ip}:${CAMERA_CONFIGURATION.camera_network.rtspPort}${CAMERA_CONFIGURATION.camera_network.rtspPath}`;
-    
-    CAMERA_CONFIGURATION.camera_network.httpCgiBase = 
-      `http://${CAMERA_CONFIGURATION.camera_network.httpUser}:${CAMERA_CONFIGURATION.camera_network.httpPass}@${CAMERA_CONFIGURATION.camera_network.ip}`;
-  }
-
   res.json({
     success: true,
     current: CAMERA_CONFIGURATION,
@@ -329,8 +374,8 @@ app.get("/api/CAMERA_DETAILS", (req, res) => {
 
 
 
-
 app.post("/api/camera/config", (req, res) => {
+
   console.log("NEW POST CAMERA CONFIGURATION:", req.body);
 
   try {
@@ -878,8 +923,10 @@ app.get("/api/ptz/stop", async (req, res) => {
 
 // ============================================================================
 // ROUTE: PTZ MOVE  (Continuous)
-// GET  /api/ptz/move?dir=UP&ps=12&ts=10
-// dirs: UP DOWN LEFT RIGHT LEFTUP RIGHTUP LEFTDOWN RIGHTDOWN PTZSTOP
+// GET  /api/ptz/move?dir=UP&ps= 1 - 24&ts= 1-20
+// dirs: "UP","DOWN","LEFT","RIGHT","LEFTUP","RIGHTUP","LEFTDOWN","RIGHTDOWN","PTZSTOP","HOME"
+//SEND  STOP AFTER EVERY PTZ MOVE REQUEST TO STOP MOVING 
+ //GET  /api/ptz/move?dir=PTZSTOP
 // ============================================================================
 app.get("/api/ptz/move", async (req, res) => {
   
@@ -901,15 +948,23 @@ app.get("/api/ptz/move", async (req, res) => {
   res.json({ success: result.ok,data : result.data,direction: dir, pan_speed: ps, tilt_speed: ts });
 }); 
 
-//default vaule 
-// bright="7"
-// saturation="4"
-// contrast="7"
-// sharpness="6"
-// hue="7"
-// vinorm="60"
-// flip="0"
-// mirror="0"
+
+// ============================================================================
+// ROUTE: IMAGE SETTING
+// GET  /api/ptz/image_setting/mode=BRIGHT&level =7
+ //
+// mode: ['BRIGHT', 'SATURATION', 'CONTRAST', 'SHARPNESS', 'HUE',`FLIP`,`MIRROR`,'DEFAULT'];
+//default vaule  = IF DEFAULT
+// bright="7"     level =1 - 7
+// saturation="7" level =1 - 7
+// contrast="7"   level =1 - 7
+// sharpness="6"  level =1 - 7
+// hue="7"        level =1 - 7 
+// flip="0"       level = 0  or 1(FLIP or NO FLIP)
+// mirror="0"      level = 0  or 1(MIRROR or NO MIRROR)  
+
+// ============================================================================
+
 app.get("/api/ptz/image_setting", async (req, res) => {
 
    const mode = (req.query.mode).toUpperCase();
@@ -958,8 +1013,12 @@ app.post("/api/ptz/position", async (req, res) => {
 // ============================================================================
 // ROUTE: ZOOM  (Continuous)
 // GET  /api/ptz/zoom?action=ZOOMIN&zs=4
+// zs = zoom speed 1 - 7
 // action: ZOOMIN ZOOMOUT ZOOMSTOP
+//SEND  STOP AFTER EVERY PTZ ZOOM REQUEST TO STOP ZOOM  Continuous
+ //GET  /api/ptz/zoom?action=ZOOMSTOP
 // ============================================================================
+
 app.get("/api/ptz/zoom", async (req, res) => {
   const action = (req.query.action || "ZOOMSTOP").toUpperCase();
   const zs     = Math.min(7, Math.max(1, parseInt(req.query.zs || CAMERA_CONFIGURATION.PTZ_STATE.defaultZoomSpeed)));
@@ -991,7 +1050,10 @@ app.get("/api/ptz/focus_mode", async (req,res)=>{
 // ============================================================================
 // ROUTE: FOCUS  (Continuous)
 // GET  /api/ptz/focus?action=FOCUSIN&fs=4
+// fs = focus speed 1 - 7
 // action: FOCUSIN FOCUSOUT STOP
+//SEND  STOP AFTER EVERY PTZ FOCUS REQUEST TO STOP FOCUS  Continuous
+ //GET  /api/ptz/focus?action=FOCUSSTOP
 // ============================================================================
 app.get("/api/ptz/focus", async (req, res) => {
 
@@ -1127,25 +1189,59 @@ function detectSdCard(callback) {
   });
 }
 
+let videosMounted = false;
 
 function detectSdCardAsync(){
 
-  return new Promise(resolve => {
-     detectSdCard((mount, size) => { 
-    if (!mount) {console.error("❌ SD CARD NOT DETECTED");
-  
+  return new Promise((resolve, reject) => {
+    
+    detectSdCard((mount, size) => { 
+    if (!mount) {
+      console.error("❌ SD CARD NOT DETECTED");
+      return reject(new Error("SD_CARD_NOT_DETECTED"));
     }else{
-    console.error("SD CARD DETECTED AVAILABLE CAPACITY MB:",size);
-    app.use("/videos", express.static(path.join(sdMountPoint, "videos")));
+
+   if (!videosMounted) {
+     app.use("/videos", express.static(path.join(sdMountPoint, "videos")));
+     videosMounted = true;
+  }
+    console.log("SD CARD DETECTED AVAILABLE CAPACITY MB:",size);
      resolve({ mount, size });
+     
    }
 
-   });});
+   });
+  
+  });
       
      
 }
 
 detectSdCardAsync();
+
+app.get("/api/sdcard/check", async (req, res) => {
+
+  try {
+
+    const { mount, size } = await detectSdCardAsync();
+
+    if (size <= SD_CARD_MIN_REQUIRED_MB) {
+      return res.status(400).json({error: "SD_CARD_CAPACITY_FULL"});
+    }
+
+    res.json({
+      success: true,
+      mount,
+      size
+    });
+
+  } catch (err) {
+
+    res.status(400).json({
+      error: err.message
+    });
+  }
+});
 
 function getUniqueFilePath(dir, baseName, ext){
 
@@ -1162,74 +1258,14 @@ function getUniqueFilePath(dir, baseName, ext){
   return filePath;
 }
 
+
+
 function getNextSegmentPath(baseFilename) {
-  
   const index = RECORDING_STATE.segments.length + 1;
   const name  = `${baseFilename}seg_part${index}`;
   return getUniqueFilePath(videosDir, name, CAMERA_CONFIGURATION.EXTENSION);
+
 }
-
-
-// function CAMERA_CONFIGURATION_CAPABILITIES(videoDev, callback){
-
-//   //v4l2-ctl -d /dev/video0 --list-formats-ext
-//   exec(`v4l2-ctl -d /dev/video0 --list-formats-ext`, (err, stdout) => {
-//  // exec(`v4l2-ctl -d ${videoDev} --list-formats-ext`, (err, stdout) => {
-//     if (err) {
-//       console.error("Failed to read camera formats:", err);
-//       return callback(null);
-//     }
-
-//     const capabilities = {};
-//     let currentFormat = null;
-//     let currentResolution = null;
-
-//     const lines = stdout.split("\n");
-
-//     for (const line of lines) {
-//       // Pixel format line → [1]: 'MJPG'
-//       const formatMatch = line.match(/\[\d+\]:\s+'(\w+)'/);
-//       if (formatMatch) {
-//         currentFormat = formatMatch[1];
-//         capabilities[currentFormat] = {};
-//         continue;
-//       }
-
-//       // Resolution line → Size: Discrete 1280x720
-//       const sizeMatch = line.match(/Size:\s+Discrete\s+(\d+x\d+)/);
-//       if (sizeMatch && currentFormat) {
-//         currentResolution = sizeMatch[1];
-//         capabilities[currentFormat][currentResolution] = [];
-//         continue;
-//       }
-
-//       // FPS line → Interval: Discrete 0.033s (30.000 fps)
-//       const fpsMatch = line.match(/\(([\d.]+)\s+fps\)/);
-//       if (fpsMatch && currentFormat && currentResolution) {
-//         const fps = parseFloat(fpsMatch[1]);
-//         capabilities[currentFormat][currentResolution].push(fps);
-//       }
-//     }
-
-//     callback(capabilities);
-//   });
-// }
-
-
-
-app.get("/api/recording/status", (req, res) => {
-  
-  res.json({
-    status: RECORDING_STATE.status,
-    active: RECORDING_STATE.active,
-    paused: RECORDING_STATE.paused,
-    filename: RECORDING_STATE.filename,
-    REC_START_TIME: RECORDING_STATE.REC_START_TIME,
-    PAUSED_AT_TIME: RECORDING_STATE.PAUSED_AT_TIME,
-    TOT_PAUSED_DURATION_MS: RECORDING_STATE.TOT_PAUSED_DURATION_MS
-  });
-   console.log("HOME PAGE STATE REQUEST ", res.json );
-});
 
 
 
@@ -1792,7 +1828,7 @@ async function diagnosticCheck(port) {
 }
 
 
- async function checkCameraHealth( print ) {
+ async function checkCameraHealth( print){
   try{
     const output = execSync(`v4l2-ctl -d ${CAMERA_CONFIGURATION.DEVICE_NODE} --all`, { timeout: 3000 }).toString();
    if(print){
@@ -1947,7 +1983,7 @@ async function killFFmpeg(reason = "UNKNOWN") {
             });
         });
 
-      await new Promise(r => setTimeout(r,300));
+      await new Promise(r => setTimeout(r,500));
 
     if(ffmpegProcess && !ffmpegProcess.killed){
       console.warn("⚠️ ERROR killFFmpeg ....Force SIGKILL" );
@@ -2076,6 +2112,14 @@ function RUN_FFMPEG_ARGUMENT_COMMAND({ outputPath = null, enableLive = false }){
     return { success: FFMPEG_ERROR.result, errorId: FFMPEG_ERROR.INVALID_ARGUMENT, reason:FFMPEG_ERROR.reason };
   }
 
+ // // Build RTSP URL dynamically
+  // if (CAMERA_CONFIGURATION.camera_network) {
+  //   CAMERA_CONFIGURATION.camera_network.rtspUrl =     `rtsp://${CAMERA_CONFIGURATION.camera_network.httpUser}:${CAMERA_CONFIGURATION.camera_network.httpPass}@${CAMERA_CONFIGURATION.camera_network.ip}:${CAMERA_CONFIGURATION.camera_network.rtspPort}${CAMERA_CONFIGURATION.camera_network.rtspPath}`;
+    
+  //   CAMERA_CONFIGURATION.camera_network.httpCgiBase =  `http://${CAMERA_CONFIGURATION.camera_network.httpUser}:${CAMERA_CONFIGURATION.camera_network.httpPass}@${CAMERA_CONFIGURATION.camera_network.ip}`;
+  // }
+
+
   }else if(CAMERA_CONFIGURATION.CAMERA_MODE === "RTSP"){
 
      args = [
@@ -2170,13 +2214,16 @@ ffmpegProcess.stdin.on('error', (err) => {
 // EACCES → No permission to execute
 // EPERM  → Operation not permitted
 
-   ffmpegProcess.on('close', (code, signal) => {
-   console.log(`🧹 FFMPEG CLOSED EVENT code : ${code} signal: ${signal}`);
-   if(ffmpegProcess != null ){
-      ffmpegProcess = null;
-   } ffmpegStopping = false;
+     ffmpegProcess.on('close', (code, signal) => {
+ 
+    ffmpegProcess = null;
+    ffmpegStopping = false;
+    RECORDING_STATE.active = false;
+   console.log(`🧹 FFMPEG CLOSED EVENT code : ${code} kksignal: ${signal}`);
    
-});
+   
+   });
+
 
 ffmpegProcess.on('error', (error) => {
   console.error('Error EVENT:', error);
@@ -2225,7 +2272,12 @@ app.post("/start", async (req, res) => {
       return res.status(400).json({ error: "INVALID_REQUEST_BODY" });
     }
 
-    const { filename, audio_muted , rec_timer_ms, rec_timer_state } = req.body;
+//  "filename" :"hh",
+//  "EXT_DETAILS":null,
+//  "TIMER_MSEC":null,
+//  "TIMER_STATE" : false,
+//  "AUDIO_MUTE_FLAG": true 
+    const { filename, AUDIO_MUTE_FLAG , TIMER_MSEC, TIMER_STATE ,EXT_DETAILS} = req.body;
      const FILE_NAME_TEMP = typeof filename === "string" && filename.trim() ? filename.trim() : `video_${GET_DATE_TIME_FORMATED()}`;
 
   
@@ -2264,6 +2316,7 @@ app.post("/start", async (req, res) => {
       RECORDING_STATE.active = false;
       return res.status(500).json({success: FFMPEG_ERROR.result,error: "CAMERA_FAILED",reason: FFMPEG_ERROR.reason});
     }else{
+
       console.log("▶ RECORDING STARTED");
     RECORDING_STATE.status = "RECORDING";
     RECORDING_STATE.curr_segment = segmentPath;
@@ -2284,15 +2337,14 @@ app.post("/start", async (req, res) => {
        
      return res.json({
       success: true,
-      filename:  RECORDING_STATE.FINAL_FILE_NAME,
-      url:       RECORDING_STATE.FINAL_FILE_URL_PATH,
-      state:     RECORDING_STATE.status,
-      RECORDING_STATE :RECORDING_STATE,
+      // filename:  RECORDING_STATE.FINAL_FILE_NAME,
+      // url:       RECORDING_STATE.FINAL_FILE_URL_PATH,
+      // state:     RECORDING_STATE.status,
+      RECORDING_STATE :CAMERA_STATE_STATUS(),
     });
   }
-    }, 500); 
+    }, 1000); 
     
-
  } catch (err) {
     console.error("START_REC_SERVER_FAILED:", err);
     return res.status(500).json({ error: "START_REC_SERVER_FAILED" });
@@ -2331,10 +2383,11 @@ app.post("/pause", async (req, res) => {
 
      return res.json({
       success: true,
-      filename:  RECORDING_STATE.FINAL_FILE_NAME,
-      url:       RECORDING_STATE.FINAL_FILE_URL_PATH,
-      state:     RECORDING_STATE.status,
-      PAUSED_AT_TIME : RECORDING_STATE.PAUSED_AT_TIME
+      RECORDING_STATE :CAMERA_STATE_STATUS()
+      // filename:  RECORDING_STATE.FINAL_FILE_NAME,
+      // url:       RECORDING_STATE.FINAL_FILE_URL_PATH,
+      // state:     RECORDING_STATE.status,
+      // PAUSED_AT_TIME : RECORDING_STATE.PAUSED_AT_TIME
     });
 
     }else{ 
@@ -2389,10 +2442,11 @@ app.post("/resume", (req, res) => {
 
      return res.json({
       success: true,
-      filename:  RECORDING_STATE.FINAL_FILE_NAME,
-      url:       RECORDING_STATE.FINAL_FILE_URL_PATH,
-      state:     RECORDING_STATE.status,
-      TOT_PAUSED_DURATION_MS : RECORDING_STATE.TOT_PAUSED_DURATION_MS 
+      RECORDING_STATE :CAMERA_STATE_STATUS()
+      // filename:  RECORDING_STATE.FINAL_FILE_NAME,
+      // url:       RECORDING_STATE.FINAL_FILE_URL_PATH,
+      // state:     RECORDING_STATE.status,
+      // TOT_PAUSED_DURATION_MS : RECORDING_STATE.TOT_PAUSED_DURATION_MS 
     });
   }
     },500); 
@@ -2626,11 +2680,12 @@ app.post("/stop", async (req, res) => {
     
        console.log("🏁 RECORDING COMPLETED");
        res.json({
-      success: true,
-      filename:  RECORDING_STATE.FINAL_FILE_NAME,
-      url:       RECORDING_STATE.FINAL_FILE_URL_PATH,
-      state:     RECORDING_STATE.status,
-      TOT_PAUSED_DURATION_MS : RECORDING_STATE.TOT_PAUSED_DURATION_MS 
+       success: true,
+       RECORDING_STATE :CAMERA_STATE_STATUS()
+      // filename:  RECORDING_STATE.FINAL_FILE_NAME,
+      // url:       RECORDING_STATE.FINAL_FILE_URL_PATH,
+      // state:     RECORDING_STATE.status,
+      // RECORDING_STATE :RECORDING_STATE 
     });
 
         RESET_DAUFALT_CAMERA_STATE();
@@ -2690,10 +2745,7 @@ app.post("/reset", async (req, res) => {
    
     res.json({
       success: true,
-      filename:  RECORDING_STATE.FINAL_FILE_NAME,
-      url:       RECORDING_STATE.FINAL_FILE_URL_PATH,
-      state:     RECORDING_STATE.status,
-      TOT_PAUSED_DURATION_MS : RECORDING_STATE.TOT_PAUSED_DURATION_MS 
+      RECORDING_STATE: CAMERA_STATE_STATUS()
     });
 
 } catch (err) {  

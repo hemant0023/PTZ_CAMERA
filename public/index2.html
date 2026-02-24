@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Camera Control System</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Share+Tech+Mono&family=Barlow+Condensed:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <!-- <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Share+Tech+Mono&family=Barlow+Condensed:wght@400;500;600;700&display=swap" rel="stylesheet"> -->
 
   <style>
     :root {
@@ -69,8 +69,8 @@
     /* ── Industrial floor-plate texture ── */
     body {
       background:
-        repeating-linear-gradient(45deg, transparent, transparent 18px, rgba(255,255,255,0.012) 18px, rgba(255,255,255,0.012) 19px),
-        repeating-linear-gradient(-45deg, transparent, transparent 18px, rgba(255,255,255,0.008) 18px, rgba(255,255,255,0.008) 19px),
+        repeating-linear-gradient(45deg, transparent, transparent 18px, #f8f2f21a 18px, rgba(230, 229, 229, 0.012) 19px),
+        repeating-linear-gradient(-45deg, transparent, transparent 18px, hsla(0, 10%, 94%, 0.856) 18px, rgba(255,255,255,0.008) 19px),
         var(--steel-darkest);
     }
 
@@ -717,10 +717,10 @@
   <ul>
     <li class="active">HOME</li>
     <li><a href="config.html">CONFIG</a></li>
-    <li><a href="records.html">RECORDS</a></li>
-    <li><a href="SYSTEM_INFORMATION.html">SYSTEM</a></li>
+    <li><a href="records2.html">RECORDS</a></li>
+    <!-- <li><a href="SYSTEM_INFORMATION.html">SYSTEM</a></li>
     <li><a href="PTZ_CONTROLS.html">PTZ</a></li>
-    <li><a href="CAMERA_IMAGE_SETTING.html">IMAGE</a></li>
+    <li><a href="CAMERA_IMAGE_SETTING.html">IMAGE</a></li> -->
   </ul>
 
   <div class="navbar-right">
@@ -867,24 +867,27 @@
         <div class="vc-br"></div>
         <div class="crosshair"></div>
 
-        <div class="hud-tl">
+        <!-- <div class="hud-tl">
           CAM-01 / CHANNEL A<br>
           CODEC · H.264 / AVC<br>
           RES · 1920 × 1080
         </div>
+       
         <div class="hud-tr">
           AUTO-FOCUS · ENABLED<br>
           OPTICAL ZOOM · ×1.0<br>
           <span id="hud-time">--:--:--</span>
         </div>
+        
         <div class="hud-bl">
           BITRATE · — Mbps<br>
           PROTOCOL · RTSP
         </div>
+      
         <div class="hud-br">
           PTZ · READY<br>
           MOTION · STANDBY
-        </div>
+        </div> -->
 
         <video id="liveFeed" autoplay muted playsinline></video>
       </div>
@@ -939,11 +942,11 @@
     document.getElementById('toggleBtn').style.left = w + 'px';
   })();
 
-  function updateHudTime() {
-    document.getElementById('hud-time').textContent = new Date().toTimeString().slice(0,8);
-  }
-  setInterval(updateHudTime, 1000);
-  updateHudTime();
+  // function updateHudTime() {
+  //   document.getElementById('hud-time').textContent = new Date().toTimeString().slice(0,8);
+  // }
+  // setInterval(updateHudTime, 1000);
+  // updateHudTime();
 
   const rangeMap = {
     panSpeed:'panSpeedVal', tiltSpeed:'tiltSpeedVal',
