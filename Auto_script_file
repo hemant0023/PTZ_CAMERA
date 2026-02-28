@@ -1,0 +1,51 @@
+[Unit]
+Description=Khadas Camera Server
+After=network-online.target avahi-daemon.service
+Wants=network-online.target
+
+[Service]
+# Run as root (camera + v4l2 + hostname + mDNS)
+User=root
+Group=root
+
+# Project directory
+#WorkingDirectory=/home/khadas/CAMERA_PROJECT
+WorkingDirectory=/home/khadas/PTZ_BENQ_CAMERA
+
+# Environment
+Environment=NODE_ENV=production
+Environment=PORT=3000
+
+# 👉 IMPORTANT: correct Node binary
+#ExecStart=/usr/local/bin/node /home/khadas/CAMERA_PROJECT/server.js
+ExecStart=/usr/local/bin/node /home/khadas/PTZ_BENQ_CAMERA/server.js
+# Restart policy
+Restart=always
+RestartSec=3
+
+# Graceful shutdown
+KillSignal=SIGINT
+TimeoutStopSec=20
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+
+# System limits (important for ffmpeg + ws)
+LimitNOFILE=65535
+Nice=-5
+
+[Install]
+WantedBy=multi-user.target
+
+
+
+#cat /etc/systemd/system/camera-server.service
+#sudo systemctl daemon-reload //Reload systemd after editing
+#sudo systemctl start camera-server //Start service
+#sudo systemctl stop camera-server //Stop service
+#sudo systemctl restart camera-server //Restart service
+#sudo systemctl status camera-server //Check status
+#sudo journalctl -u camera-server -f //Follow logs   
+#sudo systemctl enable camera-server
+#sudo systemctl disable camera-server

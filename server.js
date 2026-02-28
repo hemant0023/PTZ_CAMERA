@@ -23,7 +23,7 @@ const wss       = new WebSocket.Server({ server });
 const PORT      = 3000;
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use(express.static("public"));
+
 const { spawn, exec , execSync } = require("child_process");
 const axios = require('axios');
 
@@ -41,9 +41,19 @@ app.use(cors({
 
 app.get("/", (req, res) => {
      console.log("/index.html request recieve");
-   res.sendFile(path.join(__dirname, "public", "index.html"));
-});
+   //res.sendFile(path.join(__dirname, "public", "index.html"));
+   res.sendFile(path.join(__dirname, "public", "login.html"));
 
+});
+app.use(express.static("public"));
+app.post('/api/auth/login', (req, res) => {
+  const { username, password } = req.body;
+  if (username === 'admin' && password === 'admin') {
+    res.json({ success: true });
+  } else {
+    res.status(401).json({ success: false, error: 'Invalid credentials' });
+  }
+});
 
 
 let  ffmpegProcess = null;
@@ -67,7 +77,7 @@ let LIVE_STREAM_ENABLED = true;
 
 let  videosDir    = null;
 let  sdMountPoint = null;
-const SD_CARD_MIN_REQUIRED_MB = 100;
+const SD_CARD_MIN_REQUIRED_MB = 1024; // 1GB free space required to allow recording
 let SD_CARD_FREE_SPACE = 0;
 
 
@@ -82,9 +92,11 @@ let CAMERA_CONFIGURATION = {
    fps: 30, //5,15,30,50,60
    bitrate: "4M",
    EXTENSION: ".mp4",      // mkv | mp4
-
+  
+   ZOOM_IN_FIXED_FLAG: false, // for fixed zoom commands (e.g. zoom in/out by 5 steps) 
    ZOOM_IN_FIXED : 5, // for fixed zoom commands (e.g. zoom in/out by 5 steps)
    ZOOM_OUT_FIXED : 5, // for fixed zoom commands (e.g. zoom in/out by 5 steps)
+   ZOOM_POS_FIXED : 100,
 
    PTZ_POSITION_STEP: "0005", // for absolute/relative position commands (e.g. move pan/tilt by 5 steps)
    PTZ_MULTIPLE_POSITION_STEP: ["0010", "0020", "0050"], // for absolute/relative position commands (e.g. move pan/tilt by 10 steps)
@@ -222,10 +234,8 @@ let FFMPEG_ERROR = {
 };
 
 
-
 function RESET_DAUFALT_CAMERA_STATE(){
   // Reset state
-     
     
     RECORDING_STATE.status = "IDLE";
     RECORDING_STATE.active = false;
@@ -278,8 +288,8 @@ function CAMERA_STATE_STATUS(){
 
 
 app.get("/api/recording/status", (req, res) => {
-  res.json({status: CAMERA_STATE_STATUS()});
-   console.log("HOME PAGE STATE REQUEST ", res.json );
+  res.json(CAMERA_STATE_STATUS());
+   console.log("HOME PAGE STATE REQUEST ", CAMERA_STATE_STATUS());
 });
 
 
@@ -371,111 +381,233 @@ app.get("/api/CAMERA_DETAILS", (req, res) => {
   }
 });
 
+function updateObject(target, source, allowedKeys) {
 
+  if (!source) return;
+  Object.keys(source).forEach(key => {
+    if (allowedKeys.includes(key) && source[key] !== undefined) {
+      target[key] = source[key];
+    }
+  });
+}
 
+const CAMERA_ALLOWED = {
+  ROOT: [
+    "CAMERA_MODE",
+    "DEVICE_NODE",
+    "format",
+    "resolution",
+    "fps",
+    "bitrate",
+    "EXTENSION"
+  ],
+
+  NETWORK: Object.keys(CAMERA_CONFIGURATION.camera_network),
+
+  IMAGE: Object.keys(CAMERA_CONFIGURATION.IMAGE_SETTINGS),
+
+  PTZ: Object.keys(CAMERA_CONFIGURATION.PTZ_STATE)
+};
 
 app.post("/api/camera/config", (req, res) => {
 
   console.log("NEW POST CAMERA CONFIGURATION:", req.body);
 
   try {
-    const {CAMERA_MODE,format,resolution,fps,bitrate,EXTENSION,DEVICE_NODE,camera_network,PTZ_STATE,IMAGE_SETTINGS} = req.body;
 
-    // Validate required video settings
-    if (format && !CAMERA_CONFIGURATION_CAP.REC_FORMATS.includes(format.toUpperCase())) {
+    const body = req.body;
+
+    /* ---------------- VALIDATION ---------------- */
+
+    if (body.format &&
+        !CAMERA_CONFIGURATION_CAP.REC_FORMATS.includes(body.format.toUpperCase()))
       return res.status(400).json({ error: "Invalid format" });
-    }
 
-    if (resolution && !CAMERA_CONFIGURATION_CAP.REC_RESOLUTIONS.includes(resolution)) {
+    if (body.resolution &&
+        !CAMERA_CONFIGURATION_CAP.REC_RESOLUTIONS.includes(body.resolution))
       return res.status(400).json({ error: "Invalid resolution" });
-    }
 
-    if (fps && !CAMERA_CONFIGURATION_CAP.REC_FPS.includes(Number(fps))) {
+    if (body.fps &&
+        !CAMERA_CONFIGURATION_CAP.REC_FPS.includes(Number(body.fps)))
       return res.status(400).json({ error: "Invalid FPS" });
-    }
 
-    if (bitrate && !CAMERA_CONFIGURATION_CAP.REC_BITERATE.includes(bitrate)) {
+    if (body.bitrate &&
+        !CAMERA_CONFIGURATION_CAP.REC_BITERATE.includes(body.bitrate))
       return res.status(400).json({ error: "Invalid bitrate" });
-    }
 
-    if (CAMERA_MODE && !CAMERA_CONFIGURATION_CAP.CAMERA_MODE.includes(CAMERA_MODE)) {
+    if (body.CAMERA_MODE &&
+        !CAMERA_CONFIGURATION_CAP.CAMERA_MODE.includes(body.CAMERA_MODE))
       return res.status(400).json({ error: "Invalid camera mode" });
-    }
-     if (EXTENSION && !CAMERA_CONFIGURATION_CAP.EXTENSION.includes(EXTENSION  )) {
+
+    if (body.EXTENSION &&
+        !CAMERA_CONFIGURATION_CAP.EXTENSION.includes(body.EXTENSION))
       return res.status(400).json({ error: "Invalid extension" });
-    }
 
-    // Update camera mode
-    if (CAMERA_MODE) {
-      CAMERA_CONFIGURATION.CAMERA_MODE = CAMERA_MODE;
-    }
 
-    // Update video settings
-    if (format) {
-      CAMERA_CONFIGURATION.format = format.toLowerCase();
-    }
-    if (resolution) {
-      CAMERA_CONFIGURATION.resolution = resolution;
-      // Derive width/height
-      // const [width, height] = resolution.split("x").map(Number);
-      // CAMERA_CONFIGURATION.width = width;
-      // CAMERA_CONFIGURATION.height = height;
-    }
-    if (fps) {
-      CAMERA_CONFIGURATION.fps = Number(fps);
-    }
-    if (bitrate) {
-      CAMERA_CONFIGURATION.bitrate = bitrate;
-    }
-    if (EXTENSION) {
-      CAMERA_CONFIGURATION.EXTENSION = EXTENSION;
-    }
+    /* ---------------- ROOT UPDATE ---------------- */
 
-    // Update USB settings
-    if (DEVICE_NODE) {
-      CAMERA_CONFIGURATION.DEVICE_NODE = DEVICE_NODE;
+    updateObject(CAMERA_CONFIGURATION,body,CAMERA_ALLOWED.ROOT);
+
+    if (body.format)
+      CAMERA_CONFIGURATION.format = body.format.toLowerCase();
+
+    if (body.fps)
+      CAMERA_CONFIGURATION.fps = Number(body.fps);
+
+
+    /* ---------------- NETWORK UPDATE ---------------- */
+
+    if (body.camera_network) {
+
+      updateObject(CAMERA_CONFIGURATION.camera_network,body.camera_network,CAMERA_ALLOWED.NETWORK);
+
+       CAMERA_CONFIGURATION.camera_network.rtspUrl     = `rtsp://${CAMERA_CONFIGURATION.camera_network.httpUser}:${CAMERA_CONFIGURATION.camera_network.httpPass}@${CAMERA_CONFIGURATION.camera_network.ip}:${CAMERA_CONFIGURATION.camera_network.rtspPort}${CAMERA_CONFIGURATION.camera_network.rtspPath}`;
+       CAMERA_CONFIGURATION.camera_network.httpCgiBase = `http://${CAMERA_CONFIGURATION.camera_network.httpUser}:${CAMERA_CONFIGURATION.camera_network.httpPass}@${CAMERA_CONFIGURATION.camera_network.ip}`;
+       stopMediaMtx(); // START AUTOMATICALLY 
+      // setTimeout(startMediaMtx,3000);
     }
 
 
-    // Update network settings
-    if (camera_network) {
-      CAMERA_CONFIGURATION.camera_network = {
-        ...CAMERA_CONFIGURATION.camera_network,
-        ...camera_network
-      };
+    /* ---------------- IMAGE SETTINGS ---------------- */
 
-    CAMERA_CONFIGURATION.camera_network.rtspUrl     = `rtsp://${CAMERA_CONFIGURATION.camera_network.httpUser}:${CAMERA_CONFIGURATION.camera_network.httpPass}@${CAMERA_CONFIGURATION.camera_network.ip}:${CAMERA_CONFIGURATION.camera_network.rtspPort}${CAMERA_CONFIGURATION.camera_network.rtspPath}`;
-    CAMERA_CONFIGURATION.camera_network.httpCgiBase = `http://${CAMERA_CONFIGURATION.camera_network.httpUser}:${CAMERA_CONFIGURATION.camera_network.httpPass}@${CAMERA_CONFIGURATION.camera_network.ip}`;
-    stopMediaMtx(); // START AUTOMATICALLY 
-   // setTimeout(startMediaMtx, 3000);   
-  }
-
-    // Update PTZ settings
-    if (PTZ_STATE) {
-      CAMERA_CONFIGURATION.PTZ_STATE = {
-        ...CAMERA_CONFIGURATION.PTZ_STATE,
-        ...PTZ_STATE
-      };
+    if (body.IMAGE_SETTINGS) {updateObject(CAMERA_CONFIGURATION.IMAGE_SETTINGS,body.IMAGE_SETTINGS,CAMERA_ALLOWED.IMAGE);
     }
 
-    // Update image settings
-    if (IMAGE_SETTINGS) {
-      CAMERA_CONFIGURATION.IMAGE_SETTINGS = {
-        ...CAMERA_CONFIGURATION.IMAGE_SETTINGS,
-        ...IMAGE_SETTINGS
-      };
+
+    /* ---------------- PTZ SETTINGS ---------------- */
+
+    if (body.PTZ_STATE) {updateObject(CAMERA_CONFIGURATION.PTZ_STATE,body.PTZ_STATE,CAMERA_ALLOWED.PTZ);
     }
+
+
+    /* ---------------- SAVE ---------------- */
 
     console.log("✅ UPDATED CAMERA CONFIG:", CAMERA_CONFIGURATION);
+
     saveCameraConfig();
-    res.json({success: true,message: "CONFIGURATION_SAVED",current: CAMERA_CONFIGURATION});
 
-  }catch (error){
+    res.json({
+      success: true,
+      message: "CONFIGURATION_SAVED",
+      current: CAMERA_CONFIGURATION
+    });
+
+  } catch (error) {
+
     console.error("❌ Configuration save error:", error);
-    res.status(500).json({success: false,error: "CONFIGURATION_SAVE_FAILED",message: error.message});
-  }
 
+    res.status(500).json({
+      success: false,
+      error: "CONFIGURATION_SAVE_FAILED",
+      message: error.message
+    });
+  }
 });
+
+
+
+// app.post("/api/camera/config", (req, res) => {
+
+//   console.log("NEW POST CAMERA CONFIGURATION:", req.body);
+
+//   try {
+//     const {CAMERA_MODE,format,resolution,fps,bitrate,EXTENSION,DEVICE_NODE,camera_network,PTZ_STATE,IMAGE_SETTINGS} = req.body;
+
+//     // Validate required video settings
+//     if (format && !CAMERA_CONFIGURATION_CAP.REC_FORMATS.includes(format.toUpperCase())) {
+//       return res.status(400).json({ error: "Invalid format" });
+//     }
+
+//     if (resolution && !CAMERA_CONFIGURATION_CAP.REC_RESOLUTIONS.includes(resolution)) {
+//       return res.status(400).json({ error: "Invalid resolution" });
+//     }
+
+//     if (fps && !CAMERA_CONFIGURATION_CAP.REC_FPS.includes(Number(fps))) {
+//       return res.status(400).json({ error: "Invalid FPS" });
+//     }
+
+//     if (bitrate && !CAMERA_CONFIGURATION_CAP.REC_BITERATE.includes(bitrate)) {
+//       return res.status(400).json({ error: "Invalid bitrate" });
+//     }
+
+//     if (CAMERA_MODE && !CAMERA_CONFIGURATION_CAP.CAMERA_MODE.includes(CAMERA_MODE)) {
+//       return res.status(400).json({ error: "Invalid camera mode" });
+//     }
+//      if (EXTENSION && !CAMERA_CONFIGURATION_CAP.EXTENSION.includes(EXTENSION  )) {
+//       return res.status(400).json({ error: "Invalid extension" });
+//     }
+
+//     // Update camera mode
+//     if (CAMERA_MODE) {
+//       CAMERA_CONFIGURATION.CAMERA_MODE = CAMERA_MODE;
+//     }
+
+//     // Update video settings
+//     if (format) {
+//       CAMERA_CONFIGURATION.format = format.toLowerCase();
+//     }
+//     if (resolution) {
+//       CAMERA_CONFIGURATION.resolution = resolution;
+//       // Derive width/height
+//       // const [width, height] = resolution.split("x").map(Number);
+//       // CAMERA_CONFIGURATION.width = width;
+//       // CAMERA_CONFIGURATION.height = height;
+//     }
+//     if (fps) {
+//       CAMERA_CONFIGURATION.fps = Number(fps);
+//     }
+//     if (bitrate) {
+//       CAMERA_CONFIGURATION.bitrate = bitrate;
+//     }
+//     if (EXTENSION) {
+//       CAMERA_CONFIGURATION.EXTENSION = EXTENSION;
+//     }
+
+//     // Update USB settings
+//     if (DEVICE_NODE) {
+//       CAMERA_CONFIGURATION.DEVICE_NODE = DEVICE_NODE;
+//     }
+
+
+//     // Update network settings
+//     if (camera_network) {
+//       CAMERA_CONFIGURATION.camera_network = {
+//         ...CAMERA_CONFIGURATION.camera_network,
+//         ...camera_network
+//       };
+
+//     CAMERA_CONFIGURATION.camera_network.rtspUrl     = `rtsp://${CAMERA_CONFIGURATION.camera_network.httpUser}:${CAMERA_CONFIGURATION.camera_network.httpPass}@${CAMERA_CONFIGURATION.camera_network.ip}:${CAMERA_CONFIGURATION.camera_network.rtspPort}${CAMERA_CONFIGURATION.camera_network.rtspPath}`;
+//     CAMERA_CONFIGURATION.camera_network.httpCgiBase = `http://${CAMERA_CONFIGURATION.camera_network.httpUser}:${CAMERA_CONFIGURATION.camera_network.httpPass}@${CAMERA_CONFIGURATION.camera_network.ip}`;
+//     stopMediaMtx(); // START AUTOMATICALLY 
+//    // setTimeout(startMediaMtx, 3000);   
+//   }
+
+//     // Update PTZ settings
+//     if (PTZ_STATE) {
+//       CAMERA_CONFIGURATION.PTZ_STATE = {
+//         ...CAMERA_CONFIGURATION.PTZ_STATE,
+//         ...PTZ_STATE
+//       };
+//     }
+
+//     // Update image settings
+//     if (IMAGE_SETTINGS) {
+//       CAMERA_CONFIGURATION.IMAGE_SETTINGS = {
+//         ...CAMERA_CONFIGURATION.IMAGE_SETTINGS,
+//         ...IMAGE_SETTINGS
+//       };
+//     }
+
+//     console.log("✅ UPDATED CAMERA CONFIG:", CAMERA_CONFIGURATION);
+//     saveCameraConfig();
+//     res.json({success: true,message: "CONFIGURATION_SAVED",current: CAMERA_CONFIGURATION});
+
+//   }catch (error){
+//     console.error("❌ Configuration save error:", error);
+//     res.status(500).json({success: false,error: "CONFIGURATION_SAVE_FAILED",message: error.message});
+//   }
+
+// });
 
 CAMERA_CONFIGURATION.camera_network.rtspUrl     = `rtsp://${CAMERA_CONFIGURATION.camera_network.httpUser}:${CAMERA_CONFIGURATION.camera_network.httpPass}@${CAMERA_CONFIGURATION.camera_network.ip}:${CAMERA_CONFIGURATION.camera_network.rtspPort}${CAMERA_CONFIGURATION.camera_network.rtspPath}`;
 CAMERA_CONFIGURATION.camera_network.httpCgiBase = `http://${CAMERA_CONFIGURATION.camera_network.httpUser}:${CAMERA_CONFIGURATION.camera_network.httpPass}@${CAMERA_CONFIGURATION.camera_network.ip}`;
@@ -561,7 +693,6 @@ function notifyLiveClientsReset(){
     }
   });
 }
-
 
 
 function broadcastStatus() {
@@ -713,7 +844,6 @@ paths:
 let mediaMtxProcess = null;
 
 function stopMediaMtx(){
-
   if(mediaMtxProcess){
      mediaMtxProcess.kill("SIGINT");
      mediaMtxProcess = null;
@@ -1019,6 +1149,27 @@ app.post("/api/ptz/position", async (req, res) => {
  //GET  /api/ptz/zoom?action=ZOOMSTOP
 // ============================================================================
 
+ async  function FIXED_ZOOM_POSITION(ZOOMPOSITION,ZOOMSPEED){
+
+   const ZOOM_POSITION    = Math.min(4000, Math.max(0, parseInt(ZOOMPOSITION || CAMERA_CONFIGURATION.PTZ_STATE.ZOOM_POS_FIXED)));
+   const zs     = Math.min(7, Math.max(1, parseInt(ZOOMSPEED || CAMERA_CONFIGURATION.PTZ_STATE.defaultZoomSpeed)));
+   
+   const result = await cgiRequest(`/cgi-bin/ptzctrl.cgi?ptzcmd&zoomto&${zs}&${ZOOM_POSITION}`,`call ptz/fixed_position_zoom : ${ZOOM_POSITION}&${zs}`);
+   console.log("📡 CGI FIXED_ZOOM_POSITION RESULT : ", result);
+   return { success: result.ok, data : result.data, zoom_position: ZOOM_POSITION, zoom_speed: zs };
+
+}
+
+
+app.get("/api/ptz/zoom_position", async (req, res) => {
+
+  const ZOOM_POSITION = Math.min(4000, Math.max(0, parseInt(req.query.pos || CAMERA_CONFIGURATION.PTZ_STATE.ZOOM_POS_FIXED)));
+  const zs     = Math.min(7, Math.max(1, parseInt(req.query.zs || CAMERA_CONFIGURATION.PTZ_STATE.defaultZoomSpeed)));
+ const result = await FIXED_ZOOM_POSITION(ZOOM_POSITION,zs);
+  res.json(result);
+});
+
+
 app.get("/api/ptz/zoom", async (req, res) => {
   const action = (req.query.action || "ZOOMSTOP").toUpperCase();
   const zs     = Math.min(7, Math.max(1, parseInt(req.query.zs || CAMERA_CONFIGURATION.PTZ_STATE.defaultZoomSpeed)));
@@ -1044,7 +1195,7 @@ app.get("/api/ptz/focus_mode", async (req,res)=>{
     }
 
     const result = await cgiRequest(ep,"Focus Mode");
-     res.json({success:result.ok, mode});
+     res.json({success:result.ok, data : result.data, mode});
 });
 
 // ============================================================================
@@ -1136,6 +1287,54 @@ function getFreeSpaceMB(mountPoint, callback) {
   }
 
 
+  function cleanupOldRecordings(videosBasePath, requiredFreeMB, callback){
+  try {
+    const folders = fs.readdirSync(videosBasePath)
+      .map(name => ({
+        name,
+        fullPath: path.join(videosBasePath, name),
+        stat: fs.statSync(path.join(videosBasePath, name))
+      }))
+
+      .filter(f => f.stat.isDirectory())
+      .sort((a, b) => a.stat.mtimeMs - b.stat.mtimeMs); // oldest first
+
+    if (folders.length === 0) {
+      console.warn("⚠ No folders available for cleanup");
+      return callback(false);
+    }
+
+
+    function deleteNext() {
+
+      getFreeSpaceMB(sdMountPoint, (freeMB) => {
+        if (freeMB >= requiredFreeMB) {
+          console.log("✅ Storage recovered:", freeMB, "MB");
+          return callback(true);
+        }
+
+        if (folders.length === 0) {
+          console.error("❌ All folders deleted but still low storage");
+          return callback(false);
+        }
+
+        const oldest = folders.shift();
+        console.log("🗑 Deleting oldest folder:", oldest.fullPath);
+
+        fs.rmSync(oldest.fullPath, { recursive: true, force: true });
+
+        deleteNext();
+      });
+    }
+
+    deleteNext();
+
+  } catch (err) {
+    console.error("Cleanup error:", err);
+    callback(false);
+  }
+}
+
 function detectSdCard(callback) {
 
   exec("lsblk -o NAME,TYPE,MOUNTPOINT", (error, stdout) => {
@@ -1169,12 +1368,21 @@ function detectSdCard(callback) {
          
           console.log(`💾 SD CARD FREE SPACE: ${SD_CARD_FREE_SPACE} MB`);
 
-         
-
-          if (freeMB < SD_CARD_MIN_REQUIRED_MB) {
+          if (SD_CARD_FREE_SPACE < SD_CARD_MIN_REQUIRED_MB){
             console.error("❌ SD CARD LOW STORAGE — recording blocked");
             //return callback(null, freeMB);
-          }
+            const videosBasePath = path.join(sdMountPoint, "videos");
+            cleanupOldRecordings(videosBasePath, SD_CARD_MIN_REQUIRED_MB, (status) => {
+            if (!status) {
+            console.error("❌Cleanup failed — recording blocked");
+            return callback(null, freeMB);
+            }
+          console.log("✅ Cleanup successful — recording allowed");
+          callback(sdMountPoint, freeMB);
+       }); 
+       
+       return; // prevent double callback
+     }
 
           console.log("✅ SD CARD STORAGE OK — recording allowed");
           callback(sdMountPoint, freeMB);
@@ -1983,7 +2191,7 @@ async function killFFmpeg(reason = "UNKNOWN") {
             });
         });
 
-      await new Promise(r => setTimeout(r,500));
+      await new Promise(r => setTimeout(r,300));
 
     if(ffmpegProcess && !ffmpegProcess.killed){
       console.warn("⚠️ ERROR killFFmpeg ....Force SIGKILL" );
@@ -2121,6 +2329,18 @@ function RUN_FFMPEG_ARGUMENT_COMMAND({ outputPath = null, enableLive = false }){
 
 
   }else if(CAMERA_CONFIGURATION.CAMERA_MODE === "RTSP"){
+
+   
+    if (CAMERA_CONFIGURATION.camera_network.CAMERA_ONLINE == false) { 
+       console.log("⚠️CHECK_CAMERA_OFFLINE RETURN RECORDING_ERROR"); 
+        FFMPEG_ERROR.result = false;
+        FFMPEG_ERROR.reason = "CHECK_CAMERA_OFFLINE";
+        CHECK_CAMERA_ONLINE();
+      
+    return { success: FFMPEG_ERROR.result, errorId: FFMPEG_ERROR.INVALID_ARGUMENT, reason:FFMPEG_ERROR.reason }; 
+    }else{
+      FIXED_ZOOM_POSITION(100,7);
+    }
 
      args = [
      "-rtsp_transport", "tcp",
@@ -2271,7 +2491,7 @@ app.post("/start", async (req, res) => {
     if (!req.body || typeof req.body !== "object") {
       return res.status(400).json({ error: "INVALID_REQUEST_BODY" });
     }
-
+  
 //  "filename" :"hh",
 //  "EXT_DETAILS":null,
 //  "TIMER_MSEC":null,
@@ -2314,7 +2534,8 @@ app.post("/start", async (req, res) => {
     if (!FFMPEG_ERROR.result){
       console.error(" RUN_FFMPEG_ARGUMENT_COMMAND FAILED");
       RECORDING_STATE.active = false;
-      return res.status(500).json({success: FFMPEG_ERROR.result,error: "CAMERA_FAILED",reason: FFMPEG_ERROR.reason});
+       return res.status(400).json({ error: FFMPEG_ERROR.reason });
+      //return res.status(500).json({success: FFMPEG_ERROR.result,error: "CAMERA_FAILED",reason: FFMPEG_ERROR.reason});
     }else{
 
       console.log("▶ RECORDING STARTED");
@@ -2368,7 +2589,7 @@ app.post("/pause", async (req, res) => {
     RECORDING_STATE.status = "PAUSED";
 
      if(ffmpegProcess && ffmpegStopping == false ){
-         killFFmpeg("PAUSED_STATE STOP FFmpeg...");
+         await killFFmpeg("PAUSED_STATE STOP FFmpeg...");
         console.log("⏸ RECORDING PAUSED at", RECORDING_STATE.PAUSED_AT_TIME);
 
     //   return res.json({
@@ -2384,10 +2605,6 @@ app.post("/pause", async (req, res) => {
      return res.json({
       success: true,
       RECORDING_STATE :CAMERA_STATE_STATUS()
-      // filename:  RECORDING_STATE.FINAL_FILE_NAME,
-      // url:       RECORDING_STATE.FINAL_FILE_URL_PATH,
-      // state:     RECORDING_STATE.status,
-      // PAUSED_AT_TIME : RECORDING_STATE.PAUSED_AT_TIME
     });
 
     }else{ 
@@ -2405,8 +2622,8 @@ app.post("/pause", async (req, res) => {
 
 
 app.post("/resume", (req, res) => {
-    console.log("▶ RESUMED request RECIEVE");
 
+    console.log("▶ RESUMED request RECIEVE");
     if (!RECORDING_STATE.active || !RECORDING_STATE.paused){
       console.log("▶INVALID_RESUME_STATE : ",RECORDING_STATE.active ,"PAUSED : ",RECORDING_STATE.paused);
     return res.status(400).json({ error: "INVALID_RESUME_STATE" });
@@ -2426,7 +2643,7 @@ app.post("/resume", (req, res) => {
     setTimeout(() => { 
      if (!FFMPEG_ERROR.result){
       console.error(" RUN_FFMPEG_ARGUMENT_COMMAND FAILED");
-      return res.status(500).json({success: FFMPEG_ERROR.result,error: "CAMERA_FAILED",reason: FFMPEG_ERROR.reason});
+     return res.status(500).json({ error: FFMPEG_ERROR.reason });
     }else{
 
       console.log("▶ RECORDING RESUMED");
@@ -2622,22 +2839,26 @@ async function mergeSegmentsWithRetry(segments, finalMp4, maxRetries = 3){
   }
 }
 
+
+STOPING_RUNNING_FLAG = false;
 app.post("/stop", async (req, res) => {
     console.log("⏹STOP RECORDING REQUEST");
   
-  if (!RECORDING_STATE.active){
+  if (!RECORDING_STATE.active || STOPING_RUNNING_FLAG ) { 
     console.log("NO_ACTIVE_RECORDING");
     return res.status(400).json({ error: "NO_ACTIVE_RECORDING" });
   }
 
   try {
+     STOPING_RUNNING_FLAG = true;
      RECORDING_STATE.REC_STOP_TIME = Date.now();
      RECORDING_STATE.REC_VIDEO_DURATION = RECORDING_STATE.REC_STOP_TIME - RECORDING_STATE.REC_START_TIME;
 
     if (ffmpegProcess && ffmpegStopping == false) {
         killFFmpeg("STOP RECORDING REQUEST");
      }
-    await new Promise(r => setTimeout(r, 1000));
+
+    await new Promise(r => setTimeout(r, 500));
 
     let finalMp4 = RECORDING_STATE.FINAL_FILE_SAVE_PATH;
     if (!finalMp4.endsWith(".mp4")) {
@@ -2647,6 +2868,7 @@ app.post("/stop", async (req, res) => {
     const segments = RECORDING_STATE.segments;
     console.log("📋Total segments:", segments.length);
      if (!segments || segments.length === 0) {
+      STOPING_RUNNING_FLAG = false;
       throw new Error("NO_SEGMENTS_FOUND");
     }
 
@@ -2687,7 +2909,7 @@ app.post("/stop", async (req, res) => {
       // state:     RECORDING_STATE.status,
       // RECORDING_STATE :RECORDING_STATE 
     });
-
+        STOPING_RUNNING_FLAG = false;
         RESET_DAUFALT_CAMERA_STATE();
 
   } catch (err) {
@@ -2702,15 +2924,9 @@ app.post("/stop", async (req, res) => {
         console.warn(`⚠️ Could not delete SEGMENT FILE : ${path.basename(file)}:`, e.message);
       }
     }
-
+    STOPING_RUNNING_FLAG = false;
     RESET_DAUFALT_CAMERA_STATE();
-
-    res.status(500).json({
-      error: "STOP_FAILED",
-      type: err.type || "UNKNOWN",
-      message: err.message,
-      details: err.stderr ? "Check server logs for FFmpeg output" : undefined
-    });
+     res.status(500).json({ error: "STOP_FAILED" ,type: err.type || "UNKNOWN",message: err.message, details: err.stderr ? "Check server logs for FFmpeg output" : undefined});
   }
 });
 
@@ -3459,6 +3675,7 @@ server.listen(PORT, () => {
   startMDNS();
   monitorMDNS();
   //setInterval(broadcastStatus, 3000);
+  CHECK_CAMERA_ONLINE();
   setInterval(CHECK_CAMERA_ONLINE, 5000);
   setTimeout(startMediaMtx, 2000);
 });

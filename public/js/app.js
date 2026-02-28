@@ -59,12 +59,9 @@ function computeElapsedSeconds(data) {
   if (!data.REC_START_TIME) return 0;
 
   const now = Date.now();
-
   // If paused, freeze time at pausedAt
-
-  const effectiveNow = data.paused ? data.pausedAt || now: now;
-
-  const elapsedMs = effectiveNow - data.REC_START_TIME - (data.totalPausedMs || 0);
+  const effectiveNow = data.PAUSED ? data.PAUSED_AT_TIME || now: now;
+  const elapsedMs = effectiveNow - data.REC_START_TIME - (data.TOT_PAUSED_DURATION_MS || 0);
   return Math.max(0, Math.floor(elapsedMs / 1000));
 }
 
@@ -76,20 +73,18 @@ async function restoreRecordingState() {
     const res = await fetch("/api/recording/status");
     const data = await res.json();
     
-    
-    if (!data.active){
+    if (!data.ACTIVE){
       state = "IDLE";
       updateUI();
-       //startWSStream();
       return;
     }
 
-    state = data.paused ? "PAUSED" : "RECORDING";
-    filenameInput.value = data.filename || "";
+    state = data.PAUSED ? "PAUSED" : "RECORDING";
+    filenameInput.value = data.FINAL_FILE_NAME || "";
     filenameInput.disabled = true;
-
     seconds = computeElapsedSeconds(data);
-    if (!data.paused) REC_START_TIMEr();
+
+    if (!data.PAUSED) REC_START_TIMEr();
     updateUI();
   } catch (err) {
     console.error("STATE RESTORE FAILED", err);
@@ -97,7 +92,28 @@ async function restoreRecordingState() {
 }
 
 
- 
+//  function CAMERA_STATE_STATUS(){
+
+//   let CAMERA_STATE_STATUS = { 
+//     STATUS: RECORDING_STATE.status,
+//     ACTIVE: RECORDING_STATE.active,
+//     PAUSED: RECORDING_STATE.paused,
+//     REC_START_TIME: RECORDING_STATE.REC_START_TIME,
+//     PAUSED_AT_TIME: RECORDING_STATE.PAUSED_AT_TIME,
+//     REC_VIDEO_DURATION: RECORDING_STATE.REC_VIDEO_DURATION,
+//     TOT_PAUSED_DURATION_MS: RECORDING_STATE.TOT_PAUSED_DURATION_MS,
+    
+//     VIDEO_FOLDER_NAME:   RECORDING_STATE.VIDEO_FOLDER_NAME,
+//     FINAL_FILE_NAME:     RECORDING_STATE.FINAL_FILE_NAME ,
+//     FINAL_FILE_URL_PATH: RECORDING_STATE.FINAL_FILE_URL_PATH,
+
+//     REC_TIMER_MS: RECORDING_STATE.REC_TIMER_MS,
+//     REC_TIMER_STATE: RECORDING_STATE.REC_TIMER_STATE,
+//     AUDIO_MUTED_FLAG: RECORDING_STATE.AUDIO_MUTED_FLAG
+//   }
+
+//   return CAMERA_STATE_STATUS;
+// }
 
 
 const video = document.getElementById("liveFeed");
@@ -644,22 +660,24 @@ const filename = filenameInput.value.trim();
 
     const data = await res.json();
     if (!res.ok) {
+      alert(data.error || "START FAILED");  
       statusEl.textContent = data.error || "START_FAILED";
-      statusEl.className = "badge idle";
+      statusEl.className = "badge error";
       return;
     }else{
+
       if(data.success == true){
       statusEl.textContent = data.state || "RECORDING";
        statusEl.className = "badge idle";
       }else{
-      statusEl.textContent = data.state || "START_FAILED";
-       statusEl.className = "badge idle";
+      statusEl.textContent = data.state || "ERROR";
+       statusEl.className = "badge error";
       return;
       }
-     
     }
-    //stopWSStream();  // 🔥 stop live view during recording
-    filenameInput.value = data.filename || filename;
+    
+
+    filenameInput.value = data.FINAL_FILE_NAME || filename;
     filenameInput.disabled = true;
     seconds = 0;
     state = "RECORDING";
@@ -673,6 +691,8 @@ const filename = filenameInput.value.trim();
   }
 };
 
+
+
 pauseBtn.onclick = async () => {
   console.log("PAUSE BUTTON CLICKED");
 
@@ -681,17 +701,28 @@ pauseBtn.onclick = async () => {
     const data = await res.json();
 
     console.log("PAUSE RESPONSE:", data);
-
     if (!res.ok) {
-      alert(data.error || "PAUSE FAILED");
+      alert(data.error || "PAUSE FAILED");  
+      statusEl.textContent = data.error || "PAUSE_FAILED";
       return;
+    }else{
+
+      if(data.success == true){
+       statusEl.textContent = data.state || "PAUSED";
+       statusEl.className = "badge idle";
+      }else{
+      statusEl.textContent = data.state || "ERROR";
+       statusEl.className = "badge error";
+      return;
+      }
+     
     }
 
     state = "PAUSED";
     pauseTimer();
     updateUI();
 
-  } catch (err) {
+  }catch(err){
     console.error("PAUSE REQUEST ERROR:", err);
   }
 };
@@ -701,7 +732,23 @@ resumeBtn.onclick = async () => {
   try {
     const res = await fetch("/resume", { method: "POST" });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error);
+
+     if (!res.ok) {
+       alert(data.error || "RESUME_FAILED");
+       statusEl.textContent = data.error || "RESUME_FAILED";
+       return;
+
+    }else{
+      if(data.success == true){
+       statusEl.textContent = data.state || "RECORDING";
+       statusEl.className = "badge idle";
+      }else{
+      statusEl.textContent = data.state  || "ERROR";
+       statusEl.className = "badge error";
+      return;
+      }
+    
+    }
     
     state = "RECORDING";
     REC_START_TIMEr();
@@ -712,21 +759,47 @@ resumeBtn.onclick = async () => {
   }
 };
 
-
+//  startBtn.disabled  = state !== "IDLE";
+//   pauseBtn.disabled  = state !== "RECORDING";
+//   resumeBtn.disabled = state !== "PAUSED";
+//   stopBtn.disabled   = state === "IDLE";
 stopBtn.onclick = async () => {
 
    console.log("stopBtn BUTTON CLICKED");
   try {
-    await fetch("/stop", { method: "POST" });
-
+    state = "IDLE";
     pauseTimer();
     stopTimer();
+    updateUI();
+    statusEl.textContent  = "STOPPING...";
+    stopBtn.disabled  = true;
+    pauseBtn.disabled = true;
+    resumeBtn.disabled = true;
+  
+
+      const res = await fetch("/stop", { method: "POST" });
+      const data = await res.json();
+
+     if (!res.ok) {
+       alert(data.error || "STOP_FAILED");
+       statusEl.textContent = data.error || "STOP_FAILED";
+       return;
+
+    }else{
+      if(data.success == true){
+       statusEl.textContent = data.state || "STOPPED";
+       statusEl.className = "badge idle";
+      }else{
+      statusEl.textContent = data.state || "ERROR";
+       statusEl.className = "badge error";
+      return;
+      }
+    
+    }
 
     state = "IDLE";
     filenameInput.disabled = false;
     updateUI();
-  // setTimeout(startWSStream, 2000); // restart clean
-    
 
   }catch (err){
     console.error("Stop failed", err);
@@ -735,5 +808,4 @@ stopBtn.onclick = async () => {
 };
 
 restoreRecordingState();
-//startWSStream();
 startWebRTC();
