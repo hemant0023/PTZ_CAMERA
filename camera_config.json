@@ -1,6 +1,6 @@
 {
-  "CAMERA_MODE": "RTSP",
-  "DEVICE_NODE": "/dev/video0",
+  "CAMERA_MODE": "USB",
+  "DEVICE_NODE": "/dev/video1",
   "format": "h264",
   "resolution": "1920x1080",
   "fps": 30,
@@ -24,7 +24,7 @@
     "sharpness_CURRENT": 7
   },
   "camera_network": {
-    "CAMERA_ONLINE": false,
+    "CAMERA_ONLINE": true,
     "ip": "192.168.29.54",
     "subnet_mask": "255.255.255.0",
     "gate_way": "192.168.100.1",
@@ -72,5 +72,8 @@
       90
     ],
     "moving": false
-  }
+  },
+  "ZOOM_IN_FIXED": 100,
+  "ZOOM_OUT_FIXED": 5,
+  "PTZ_POSITION_STEP": "222"
 }

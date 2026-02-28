@@ -94,7 +94,7 @@ let CAMERA_CONFIGURATION = {
    EXTENSION: ".mp4",      // mkv | mp4
   
    ZOOM_IN_FIXED_FLAG: false, // for fixed zoom commands (e.g. zoom in/out by 5 steps) 
-   ZOOM_IN_FIXED : 5, // for fixed zoom commands (e.g. zoom in/out by 5 steps)
+   ZOOM_IN_FIXED : 100, // for fixed zoom commands (e.g. zoom in/out by 5 steps)
    ZOOM_OUT_FIXED : 5, // for fixed zoom commands (e.g. zoom in/out by 5 steps)
    ZOOM_POS_FIXED : 100,
 
@@ -453,6 +453,24 @@ app.post("/api/camera/config", (req, res) => {
 
     if (body.fps)
       CAMERA_CONFIGURATION.fps = Number(body.fps);
+   
+ if (body.DEVICE_NODE)
+      CAMERA_CONFIGURATION.DEVICE_NODE = body.DEVICE_NODE;
+
+  if(body.ZOOM_IN_FIXED )
+      CAMERA_CONFIGURATION.ZOOM_IN_FIXED = body.ZOOM_IN_FIXED;
+
+   if(body.ZOOM_OUT_FIXED )
+      CAMERA_CONFIGURATION.ZOOM_OUT_FIXED = body.ZOOM_OUT_FIXED;
+    if(body.ZOOM_POS_FIXED )  
+      CAMERA_CONFIGURATION.ZOOM_POS_FIXED = body.ZOOM_POS_FIXED;
+
+    if(body.PTZ_POSITION_STEP )  
+      CAMERA_CONFIGURATION.PTZ_POSITION_STEP = body.PTZ_POSITION_STEP;
+
+   
+  // PTZ_MULTIPLE_POSITION_STEP: ["0010", "0020", "0050"], // for absolute/relative position commands (e.g. move pan/tilt by 10 steps)
+
 
 
     /* ---------------- NETWORK UPDATE ---------------- */
@@ -645,6 +663,7 @@ function loadCameraConfig() {
 
 loadCameraConfig();
 
+
 function isSafeName(name) {
   return /^[a-zA-Z0-9._-]+$/.test(name);
 }
@@ -750,9 +769,11 @@ async function cgiRequest(path, label = "") {
 // ============================================================================
 // MEDIAMTX CONFIG GENERATION
 // ============================================================================
-function writeMediaMtxConfig() {
 
-  const yaml = `
+
+function writeMediaMtxConfig(mode) {
+
+  const yaml_usb = `
 logLevel: info
 logDestinations: [stdout]
 
@@ -814,8 +835,7 @@ pathDefaults:
 # =========================
 paths:
   ${CAMERA_CONFIGURATION.mediamtx.streamPath}:
-    source: ${CAMERA_CONFIGURATION.camera_network.rtspUrl}
-    rtspTransport: tcp
+    source: publisher 
     sourceOnDemand: no
 
     # Stability tuning
@@ -831,6 +851,95 @@ paths:
     runOnNotReady: echo "[MediaMTX] Stream lost"
 `;
 
+const yaml_rtsp = `
+logLevel: info
+logDestinations: [stdout]
+
+# ---------- PERFORMANCE ----------
+readTimeout: 10s
+writeTimeout: 10s
+writeQueueSize: 1024
+udpMaxPayloadSize: 1452
+
+
+# =========================
+# RTSP SERVER SETTINGS
+# =========================
+rtsp: yes
+rtspAddress: :${CAMERA_CONFIGURATION.mediamtx.rtspPort}
+rtspTransports: [tcp]
+rtspEncryption: "no"
+
+# =========================
+# WEBRTC SETTINGS
+# =========================
+webrtc: yes
+webrtcAddress: :${CAMERA_CONFIGURATION.mediamtx.webRTCPort}
+#webrtcEncryption: "no"
+webrtcAllowOrigins: ["*"]
+webrtcICEServers2: []
+
+# Reduce buffering →  # Low latency tuning
+webrtcHandshakeTimeout: 10s
+webrtcTrackGatherTimeout: 2s
+webrtcSTUNGatherTimeout: 5s
+
+# ---------- DISABLE UNUSED SERVICES ----------
+rtmp: no
+srt: no
+api: no
+metrics: no
+pprof: no
+playback: no
+
+# =========================
+# HLS (Optional fallback)
+# =========================
+hls: no
+hlsAddress: :8888
+hlsAlwaysRemux: yes
+hlsVariant: lowLatency
+hlsSegmentCount: 7
+hlsSegmentDuration: 500ms
+hlsPartDuration: 100ms
+
+pathDefaults:
+  sourceOnDemand: no
+  maxReaders: 0
+  rtspTransport: tcp
+
+# =========================
+# PATH CONFIGURATION
+# =========================
+paths:
+  ${CAMERA_CONFIGURATION.mediamtx.streamPath}:
+    source: ${CAMERA_CONFIGURATION.camera_network.rtspUrl} 
+    rtspTransport: tcp
+    sourceOnDemand: no
+
+    # Stability tuning
+    maxReaders: 0   # unlimited clients
+  
+
+    # Auto-reconnect if camera drops
+    sourceOnDemandStartTimeout: 10s
+    sourceOnDemandCloseAfter: 30s
+
+    # Logging hooks
+    runOnReady: echo    "[MediaMTX] Stream ready successfully"
+    runOnNotReady: echo "[MediaMTX] Stream lost"
+`;
+console.log("======== mode========", mode);
+let yaml ;
+if(mode === 'USB'){
+ yaml = yaml_usb;
+
+}else if(mode === 'RTSP'){
+ yaml = yaml_rtsp;
+}else{
+   yaml = yaml_rtsp;
+}
+
   fs.writeFileSync(CAMERA_CONFIGURATION.mediamtx.configFile,
     yaml.trim() + "\n"
   );
@@ -838,6 +947,8 @@ paths:
   console.log("📝mediamtx.yml written");
 }
 
+
+//
 // ============================================================================
 // START / STOP MEDIAMTX
 // ============================================================================
@@ -850,9 +961,39 @@ function stopMediaMtx(){
   }
 }
 
-function startMediaMtx(){
+function restartMediaMtx(mode){
 
-  writeMediaMtxConfig();
+  console.log("♻️ Restarting MediaMTX:", mode);
+
+  stopMediaMtx();
+
+  setTimeout(() => {
+    startMediaMtx(mode);
+  }, 1000);
+}
+
+async function waitRtspReady(port=8554){
+  const net = require("net");
+
+  return new Promise(resolve=>{
+    const tryConnect=()=>{
+      const s=new net.Socket();
+      s.once("connect",()=>{s.destroy();resolve();});
+      s.once("error",()=>setTimeout(tryConnect,300));
+      s.connect(port,"127.0.0.1");
+    };
+    tryConnect();
+  });
+}
+
+function startMediaMtx( mode ){
+
+  if (mediaMtxProcess) {
+    console.log("⚠️ MediaMTX already running");
+    return;
+  }
+   
+  writeMediaMtxConfig(mode);
 
   if (!fs.existsSync(CAMERA_CONFIGURATION.mediamtx.binary)){
     console.warn(`⚠️  MediaMTX binary not found at: ${CAMERA_CONFIGURATION.mediamtx.binary}`);
@@ -862,7 +1003,8 @@ function startMediaMtx(){
     return;
   }
 
-  console.log("▶️  Starting MediaMTX...");
+  console.log("▶️  Starting MediaMTX...",CAMERA_CONFIGURATION.camera_network.rtspUrl);
+
  mediaMtxProcess = spawn(
   CAMERA_CONFIGURATION.mediamtx.binary,
   [CAMERA_CONFIGURATION.mediamtx.configFile],
@@ -879,7 +1021,8 @@ mediaMtxProcess.once("spawn", () => {
   mediaMtxProcess.on("close", code => {
    console.warn(`⚠️MediaMTX exited (code ${code}), restarting `);
    mediaMtxProcess = null;
-   setTimeout(startMediaMtx, 3000);
+   mediaMtxRunning = false;
+   
   });
 
   console.log(`✅ MediaMTX started`);
@@ -892,49 +1035,82 @@ mediaMtxProcess.once("spawn", () => {
 // ============================================================================
 // CAMERA HEALTH CHECK
 // ============================================================================
-async function CHECK_CAMERA_ONLINE(){
-  
-  try {
+CAMERA_CONFIGURATION.camera_network.CAMERA_ONLINE = false; 
+ let mediaMtxRunning = false;
 
-    if (CAMERA_CONFIGURATION.CAMERA_MODE === 'RTSP') {
+
+async function CHECK_CAMERA_ONLINE(){
+
+  try {
+    //console.log("CAMERA_CONFIGURATION CAMERA_MODE",CAMERA_CONFIGURATION.CAMERA_MODE); 
+
+    if (CAMERA_CONFIGURATION.CAMERA_MODE === 'RTSP' ) {
+
     await axios.get(`http://${CAMERA_CONFIGURATION.camera_network.ip}/cgi-bin/param.cgi?get_device_conf`, { 
       timeout: 2000, auth: { username: CAMERA_CONFIGURATION.camera_network.httpUser, password: CAMERA_CONFIGURATION.camera_network.httpPass } });
-    if (!CAMERA_CONFIGURATION.camera_network.CAMERA_ONLINE){ 
-      CAMERA_CONFIGURATION.camera_network.CAMERA_ONLINE = true; 
-      console.log("✅ CHECK_CAMERA_ONLINE"); 
-    
-    }
 
-    
+      CAMERA_CONFIGURATION.camera_network.CAMERA_ONLINE = true; 
+      console.log("✅ CHECK_RTSP_CAMERA_ONLINE"); 
+  
      } else if (CAMERA_CONFIGURATION.CAMERA_MODE === 'USB') {
-      // Test USB device
+
       const deviceExists = fs.existsSync(CAMERA_CONFIGURATION.DEVICE_NODE);
       if (deviceExists){
         try {
-          const output = execSync(`v4l2-ctl -d ${CAMERA_CONFIGURATION.DEVICE_NODE} --list-formats-ext`,{ timeout: 3000 }).toString();
+          
+          CAMERA_CONFIGURATION.camera_network.CAMERA_ONLINE = true; 
+          console.log("✅ CHECK_USB_CAMERA_ONLINE"); 
 
-          return({success: true,online: true,mode: 'USB',message: 'USB camera detected',
-            device: CAMERA_CONFIGURATION.DEVICE_NODE
-          });
-        } catch (e) {
+          if (!ffmpegProcess ){
+          console.log("========CAMERA_ONLINE CHECK_DEVICE_NODE STARTING FFMEG=================:", CAMERA_CONFIGURATION.DEVICE_NODE);
+           
+           startMediaMtx(CAMERA_CONFIGURATION.CAMERA_MODE);
+           mediaMtxRunning = true;
+          await new Promise(r => setTimeout(r,500));
+          RUN_FFMPEG_ARGUMENT_COMMAND({ outputPath: null,enableLive: true}); 
+         }
+
+        //  const output = execSync(`v4l2-ctl -d ${CAMERA_CONFIGURATION.DEVICE_NODE} --list-formats-ext`,{ timeout: 3000 }).toString();
+        //  console.log("CAMERA_CONFIGURATION USB", output); 
+   
+        } catch(e){
           throw new Error('USB device node exists but not responding');
         }
-      } else {
-        throw new Error('USB device not found');
-      }
-    
+      
+      }else{
 
+         const videoDev =   await findCameraPortPath();
+         if (!videoDev || !videoDev.videoNode){
+          console.log(" CAMERA_USB_ERROR_videoDev:", videoDev);
+          return;
+       }
+
+        CAMERA_CONFIGURATION.DEVICE_NODE = videoDev.videoNode;
+        //throw new Error('USB device not found');
+      }
 
      }
- // broadcastStatus(); 
-    } catch (error) {
-    if (CAMERA_CONFIGURATION.camera_network.CAMERA_ONLINE) { 
-        CAMERA_CONFIGURATION.camera_network.CAMERA_ONLINE = false; 
-      console.log("⚠️CHECK_CAMERA_OFFLINE"); 
-     // broadcastStatus(); 
-    }
+
+  
+  if (CAMERA_CONFIGURATION.camera_network.CAMERA_ONLINE && !mediaMtxRunning) {
+
+    console.log("✅ Camera Online → Start MediaMTX");
+    mediaMtxRunning = true;
+    startMediaMtx(CAMERA_CONFIGURATION.CAMERA_MODE);
 
   }
+
+  if (!CAMERA_CONFIGURATION.camera_network.CAMERA_ONLINE && mediaMtxRunning) {
+      console.log("⚠️ Camera Offline → Stop MediaMTX");
+      mediaMtxRunning = false;
+    //stopMediaMtx();
+   // setTimeout(startMediaMtx, 3000);
+  }
+ 
+    } catch (error) {
+        CAMERA_CONFIGURATION.camera_network.CAMERA_ONLINE = false; 
+      console.log("⚠️ERROR IN CHECK_CAMERA_OFFLINE"); 
+    }
 
 }
 
@@ -1359,7 +1535,7 @@ function detectSdCard(callback) {
           fs.mkdirSync(videosDir, { recursive: true });
         }
 
-        getFreeSpaceMB(sdMountPoint, (freeMB) => {
+          getFreeSpaceMB(sdMountPoint, (freeMB) => {
           if (freeMB == null) {
             console.error("❌ Unable to determine SD card free space");
             return callback(null, null);
@@ -1370,18 +1546,18 @@ function detectSdCard(callback) {
 
           if (SD_CARD_FREE_SPACE < SD_CARD_MIN_REQUIRED_MB){
             console.error("❌ SD CARD LOW STORAGE — recording blocked");
-            //return callback(null, freeMB);
             const videosBasePath = path.join(sdMountPoint, "videos");
-            cleanupOldRecordings(videosBasePath, SD_CARD_MIN_REQUIRED_MB, (status) => {
-            if (!status) {
+            cleanupOldRecordings(videosBasePath, SD_CARD_MIN_REQUIRED_MB,(status) => {
+            if(!status){
             console.error("❌Cleanup failed — recording blocked");
             return callback(null, freeMB);
             }
+
           console.log("✅ Cleanup successful — recording allowed");
           callback(sdMountPoint, freeMB);
        }); 
        
-       return; // prevent double callback
+       return callback(null, null); 
      }
 
           console.log("✅ SD CARD STORAGE OK — recording allowed");
@@ -2235,6 +2411,14 @@ function findMoovEnd(buffer){
   return null;
 }
 
+// ffmpeg -f v4l2 -i /dev/video0 -frames:v 1 snapshot.jpg
+// //ffmpeg -rtsp_transport tcp -i rtsp://camera/stream1 -frames:v 1 snapshot.jpg
+// "-vframes", "1",
+// "-q:v", "2",
+// "snapshot.jpg"
+
+//CAMERA_CONFIGURATION.CAMERA_MODE ="USB";
+
 
 function RUN_FFMPEG_ARGUMENT_COMMAND({ outputPath = null, enableLive = false }){
   
@@ -2245,41 +2429,49 @@ function RUN_FFMPEG_ARGUMENT_COMMAND({ outputPath = null, enableLive = false }){
        FFMPEG_ERROR.result = false;
        FFMPEG_ERROR.reason = "FFMPEG_ALREADY_RUNNING";
        console.log("FFMPEG_ERROR",FFMPEG_ERROR.reason);
-       return { success: FFMPEG_ERROR.result, errorId: FFMPEG_ERROR.INVALID_ARGUMENT, reason:FFMPEG_ERROR.reason   };
+       return { success: FFMPEG_ERROR.result, errorId: FFMPEG_ERROR.INVALID_ARGUMENT, reason:FFMPEG_ERROR.reason };
   }
 
   let args;
  if(CAMERA_CONFIGURATION.CAMERA_MODE === "USB"){
 
-     const videoDev =  findCameraPortPath();
+      //   const videoDev =  findCameraPortPath();
+      //  if (!videoDev || !videoDev.videoNode){
+      //  console.log(" CAMERA_USB_ERROR_RESET:", videoDev);
+      //  FFMPEG_ERROR.result = false;
+      //  FFMPEG_ERROR.reason = "USB_CAMERA_PORT_ERROR";
+      //  console.log("FFMPEG_ERROR",FFMPEG_ERROR.reason);
+      //  return { success: FFMPEG_ERROR.result, errorId: FFMPEG_ERROR.INVALID_ARGUMENT, reason:FFMPEG_ERROR.reason };
+  
+      // }else{
+      //   //console.log("LIVE BEFORE CAMERA_CONFIGURATION:", CAMERA_CONFIGURATION);
+      //   CAMERA_CONFIGURATION.DEVICE_NODE = videoDev.videoNode;
+      // }
 
-       if (!videoDev || !videoDev.videoNode){
-       console.log(" CAMERA_USB_ERROR_RESET:", videoDev);
-       ws.send(JSON.stringify({ type: "ERROR", message: "USB_CAMERA_ERROR" }));
-       return;
-      }
-
-  console.log("LIVE BEFORE CAMERA_CONFIGURATION:", CAMERA_CONFIGURATION);
-  console.log("✅ LIVE Camera detected:", videoDev);
-  CAMERA_CONFIGURATION.DEVICE_NODE = videoDev.videoNode;
-  console.log("LIVE FINAL CAMERA_CONFIGURATION:", CAMERA_CONFIGURATION);
+ 
 
   args = [
 
     "-loglevel", "error",
     "-fflags", "+genpts+discardcorrupt+nobuffer",
     "-rtbufsize", "100M",  // ← Add buffer
+   // "-stimeout", "5000000",
     "-f", "v4l2",
     "-input_format", "h264",
     "-video_size", CAMERA_CONFIGURATION.resolution,
     "-framerate", String(CAMERA_CONFIGURATION.fps),
     "-thread_queue_size", "512",  // ← Add thread queue
     "-i", CAMERA_CONFIGURATION.DEVICE_NODE,
+   //  "-f", "alsa",            // 🎤 AUDIO
+    // "-i", "hw:1",            // adjust mic device
     "-map", "0:v",
     "-c:v", "copy",
-    "-avoid_negative_ts", "make_zero"  // ← Fix timestamp issues
+    //"-c:a", "aac",
+    "-b:a", "128k",
+    "-avoid_negative_ts", "make_zero",  // ← Fix timestamp issues
+    "-flush_packets","1",
+    "-use_wallclock_as_timestamps", "1"
   ];
-
 
   // 🎥 OUTPUT MODE
   if (enableLive && outputPath){
@@ -2287,31 +2479,36 @@ function RUN_FFMPEG_ARGUMENT_COMMAND({ outputPath = null, enableLive = false }){
     console.log("✅ FFMPEG enableLive && outputPath",outputPath);
     args.push(
       "-f", "tee",
-      `[f=mp4:movflags=+faststart]${outputPath}|` + `[f=mp4:g=30:keyint_min=30:sc_threshold=0:movflags=frag_keyframe+empty_moov+default_base_moof:frag_duration=100000]pipe:1`
+      //`[f=mp4:movflags=+faststart]${outputPath}|` + `[f=mp4:g=30:keyint_min=30:sc_threshold=0:movflags=frag_keyframe+empty_moov+default_base_moof:frag_duration=100000]pipe:1`
+      `[f=mp4:movflags=+faststart]${outputPath}|` + `[f=rtsp:rtsp_transport=tcp]rtsp://localhost:8554/live_camera`
     );
 
   }else if(enableLive){
    
+  
     console.log("✅ FFMPEG  enableLive ONLY ");
-
     args.push(
-    "-flush_packets","1",
-    "-f", "mp4",//"h264"
-    "-g" ,"30",
-    "-keyint_min","30",
-    "-sc_threshold","0",
-    "-movflags", "frag_keyframe+empty_moov+default_base_moof",
-    "-frag_duration", "100000",   // 100ms fragments
-    "pipe:1"
+   "-f", "rtsp",
+   "-rtsp_transport", "tcp",
+   "rtsp://localhost:8554/live_camera"
+   
+    // "-flush_packets","1",
+    // "-f", "mp4",//"h264"
+    // "-g" ,"30",
+    // "-keyint_min","30",
+    // "-sc_threshold","0",
+    // "-movflags", "frag_keyframe+empty_moov+default_base_moof",
+    // "-frag_duration", "100000",   // 100ms fragments
+    // "pipe:1"
     );
 
-  }else if(outputPath){
+   }else if(outputPath){
     
     console.log("✅ FFMPEG  outputPath ONLY");
     args.push(
-    "-f", "mp4",
+     "-f", "mp4",
     "-movflags", "+faststart",
-    outputPath
+     outputPath
     );
 
   }else{ 
@@ -2319,14 +2516,6 @@ function RUN_FFMPEG_ARGUMENT_COMMAND({ outputPath = null, enableLive = false }){
     FFMPEG_ERROR.reason = "NO_OUTPUT_DEFINED";
     return { success: FFMPEG_ERROR.result, errorId: FFMPEG_ERROR.INVALID_ARGUMENT, reason:FFMPEG_ERROR.reason };
   }
-
- // // Build RTSP URL dynamically
-  // if (CAMERA_CONFIGURATION.camera_network) {
-  //   CAMERA_CONFIGURATION.camera_network.rtspUrl =     `rtsp://${CAMERA_CONFIGURATION.camera_network.httpUser}:${CAMERA_CONFIGURATION.camera_network.httpPass}@${CAMERA_CONFIGURATION.camera_network.ip}:${CAMERA_CONFIGURATION.camera_network.rtspPort}${CAMERA_CONFIGURATION.camera_network.rtspPath}`;
-    
-  //   CAMERA_CONFIGURATION.camera_network.httpCgiBase =  `http://${CAMERA_CONFIGURATION.camera_network.httpUser}:${CAMERA_CONFIGURATION.camera_network.httpPass}@${CAMERA_CONFIGURATION.camera_network.ip}`;
-  // }
-
 
   }else if(CAMERA_CONFIGURATION.CAMERA_MODE === "RTSP"){
 
@@ -2339,7 +2528,8 @@ function RUN_FFMPEG_ARGUMENT_COMMAND({ outputPath = null, enableLive = false }){
       
     return { success: FFMPEG_ERROR.result, errorId: FFMPEG_ERROR.INVALID_ARGUMENT, reason:FFMPEG_ERROR.reason }; 
     }else{
-      FIXED_ZOOM_POSITION(100,7);
+
+      FIXED_ZOOM_POSITION(CAMERA_CONFIGURATION.ZOOM_IN_FIXED,7);
     }
 
      args = [
@@ -2351,6 +2541,7 @@ function RUN_FFMPEG_ARGUMENT_COMMAND({ outputPath = null, enableLive = false }){
      "-stimeout", "5000000",
      "-i", CAMERA_CONFIGURATION.camera_network.rtspUrl,
      "-c:v", "copy",
+      "-c:a", "copy",
      "-map", "0:v",
      "-avoid_negative_ts", "make_zero",
      "-use_wallclock_as_timestamps", "1",
@@ -2375,8 +2566,10 @@ function RUN_FFMPEG_ARGUMENT_COMMAND({ outputPath = null, enableLive = false }){
 
   // 🚀 SPAWN
   try {
+     console.log("✅ FFMPEG ",args);
     ffmpegProcess = spawn("ffmpeg", args);
-  } catch (err) {
+  
+  }catch (err){
       FFMPEG_ERROR.result = false;
       FFMPEG_ERROR.reason = "FFMPEG_PROCESS_FAILED_DEFINED";
       return { success: FFMPEG_ERROR.result, errorId: FFMPEG_ERROR.INVALID_ARGUMENT, reason:FFMPEG_ERROR.reason   };
@@ -2386,8 +2579,9 @@ function RUN_FFMPEG_ARGUMENT_COMMAND({ outputPath = null, enableLive = false }){
   ffmpegProcess.stderr.on("data", data => {
 
     const msg = data.toString();
+     console.error("SBC FFMPEG ERROR:", msg);
     if(msg.includes("error") || msg.includes("Error")){
-      console.error("SBC FFMPEG ERROR:", msg);
+     
       FFMPEG_ERROR.result = false;
       FFMPEG_ERROR.reason = data.toString();
 
@@ -2526,7 +2720,7 @@ app.post("/start", async (req, res) => {
     const segmentPath = getNextSegmentPath(FILE_NAME_TEMP);
     console.log("FIRST REC SEGMENT PATH:", segmentPath);
 
-    RUN_FFMPEG_ARGUMENT_COMMAND({ enableLive: LIVE_STREAM_ENABLED,outputPath: segmentPath});
+    RUN_FFMPEG_ARGUMENT_COMMAND({ outputPath: segmentPath,enableLive: LIVE_STREAM_ENABLED});
    
     setTimeout(() => {
     //console.log("RUN_FFMPEG_ARGUMENT_COMMAND OUTPUT",FFMPEG_ERROR);
@@ -3670,13 +3864,21 @@ server.on("error", err => {
 
 ensureHostname();
 cleanupPort(PORT);
+
+
 server.listen(PORT, () => {
+
   console.log(`Camera server running on http://0.0.0.0:${PORT}`);
   startMDNS();
   monitorMDNS();
-  //setInterval(broadcastStatus, 3000);
   CHECK_CAMERA_ONLINE();
-  setInterval(CHECK_CAMERA_ONLINE, 5000);
-  setTimeout(startMediaMtx, 2000);
+
+  setInterval(() =>{
+    if(!RECORDING_STATE.active && ffmpegStopping == false && STOPING_RUNNING_FLAG == false ){
+        CHECK_CAMERA_ONLINE();
+    }
+    
+  }, 5000);
+  
 });
 
