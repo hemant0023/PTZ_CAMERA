@@ -12,6 +12,16 @@
 // sudo apt update
 // sudo apt install ffmpeg v4l-utils lsusb
 
+// # Install NetworkManager (if not installed)
+// sudo apt-get install network-manager
+
+// # Install wireless tools
+// sudo apt-get install wireless-tools
+
+// # Verify tools work
+// nmcli device wifi list
+// iwlist wlan0 scan
+
 const fs        = require("fs");
 const path      = require("path");
 const express   = require("express");
@@ -21,11 +31,15 @@ const http      = require("http");
 const server    = http.createServer(app);
 const wss       = new WebSocket.Server({ server });
 const PORT      = 3000;
+const network = require("./networkManager");
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 const { spawn, exec , execSync } = require("child_process");
 const axios = require('axios');
+
+const util = require('util');
+const execPromise = util.promisify(exec);
 
 const cors = require('cors');
 const { Console } = require("console");
@@ -54,6 +68,351 @@ app.post('/api/auth/login', (req, res) => {
     res.status(401).json({ success: false, error: 'Invalid credentials' });
   }
 });
+
+
+function cmd_runCommand(cmd) {
+
+    return new Promise((resolve, reject) => {
+        exec(cmd, (error, stdout, stderr) => {
+            if (error) {
+               console.log("cmd_runCommand error",error.message);
+                reject(stderr || error.message);
+               
+            } else {
+              console.log("cmd_runCommand executed",stdout);
+                resolve(stdout.trim());
+                  
+            }
+        });
+    });
+}
+
+
+
+// app.post("/SET_SUBNETS_NETWORK", async (req, res) => {
+//     try {
+//         const { ip } = req.body;
+
+//         await network.addIP("eth0", ip);
+     
+
+//         res.json({ status: "success" });
+//     } catch (err) {
+//         res.status(400).json({ status: "error", message: err });
+//     }
+// });
+
+
+
+// app.post("/SET_GATEWAY_NETWORK", async (req, res) => {
+//     try {
+//         const { gateway } = req.body;
+
+      
+//         await network.addGateway(gateway);
+
+//         res.json({ status: "success" });
+//     } catch (err) {
+//         res.status(400).json({ status: "error", message: err });
+//     }
+// });
+
+
+// app.post("/DELETE_SUBNETS_NETWORK", async (req, res) => {
+//     try {
+//         await network.deleteGateway();
+//         res.json({ status: "gateway deleted" });
+//     } catch (err) {
+//         res.status(400).json({ error: err });
+//     }
+// });
+
+
+// Example: Set static IP
+async function setStaticIP(ip, gateway) {
+  try {
+    // Add IP
+  await  network.addIP("eth0",`${CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.STATIC_IP_ADDRESS}/24`);
+   // await network.addIP('eth0', ip + '/24');
+    
+    // Set gateway
+    await network.addGateway(gateway);
+    
+    // Test connection
+    await network.testPing();
+    
+    console.log('✅ Network configured successfully');
+    return true;
+  } catch (error) {
+    console.error('❌ Network configuration failed:', error);
+    return false;
+  }
+}
+
+// async function switchToDHCP(iface = 'wlan0'){
+
+//   try{
+//     // Remove static IP if exists
+//    // const currentIP = await getCurrentIPAddress();
+//    // await network.deleteIP(iface, currentIP + '/24');
+    
+//     // Remove gateway
+//     await network.deleteGateway();
+    
+//     // Restart network service to get DHCP
+//     //await execPromise('sudo systemctl restart NetworkManager');
+    
+//     console.log('✅ Switched to DHCP');
+//     return true;
+//   } catch (error) {
+//     console.error('❌ DHCP switch failed:', error);
+//     return false;
+//   }
+// }
+
+
+
+// app.post('/api/network/apply', async (req, res) => {
+//   try {
+//     const networkConfig = req.body;
+    
+//     console.log('🔧 Applying network configuration:', networkConfig);
+    
+//     const results = {
+//       success: true,
+//       applied: [],
+//       errors: []
+//     };
+    
+//     // Determine interface
+//     const iface = networkConfig.CONNECT_SYSTEM_NETWORK === 'WIFI' ? 'wlan0' : 'eth0';
+    
+//     // Apply based on mode
+//     if (networkConfig.SYSTEM_NETWORK_MODE === 'STATIC') {
+//       try {
+//         // Remove existing IP
+//         try {
+//           await network.deleteIP(iface, networkConfig.STATIC_IP_ADDRESS + '/24');
+//         } catch (e) {
+//           console.log('No existing IP to remove');
+//         }
+        
+//         // Add new static IP
+//         await network.addIP(
+//           iface,
+//           networkConfig.STATIC_IP_ADDRESS + '/24'
+//         );
+//         results.applied.push('Static IP configured');
+        
+//         // Set gateway
+//         try {
+//           await network.deleteGateway();
+//         } catch (e) {
+//           console.log('No existing gateway');
+//         }
+        
+//         await network.addGateway(networkConfig.GATE_WAY);
+//         results.applied.push('Gateway configured');
+        
+//       } catch (error) {
+//         results.errors.push('IP/Gateway config failed: ' + error);
+//       }
+//     }
+    
+//     // Connect to WiFi if needed
+//     if (networkConfig.CONNECT_SYSTEM_NETWORK === 'WIFI' || 
+//         networkConfig.CONNECT_SYSTEM_NETWORK === 'ETHERNET & WIFI') {
+      
+//       if (networkConfig.WIFI_SSID && networkConfig.WIFI_PASSWORD) {
+//         try {
+//           // Use nmcli to connect
+//           await execPromise(
+//             `nmcli device wifi connect "${networkConfig.WIFI_SSID}" password "${networkConfig.WIFI_PASSWORD}"`
+//           );
+//           results.applied.push('WiFi connected');
+//         } catch (error) {
+//           results.errors.push('WiFi connection failed: ' + error.message);
+//         }
+//       }
+//     }
+    
+//     // Test connectivity
+//     try {
+//       await network.testPing();
+//       results.applied.push('Internet connectivity verified');
+//     } catch (error) {
+//       results.errors.push('Ping test failed (no internet?)');
+//     }
+    
+//     if (results.errors.length > 0) {
+//       results.success = false;
+//     }
+    
+//     res.json(results);
+    
+//   } catch (error) {
+//     console.error('Network apply error:', error);
+//     res.status(500).json({
+//       success: false,
+//       error: error.message
+//     });
+//   }
+// });
+
+ const os = require('os');
+const { AsyncResource } = require("async_hooks");
+  const interfaces = os.networkInterfaces();
+// Get current IP address
+async function getCurrentIPAddress() {
+
+  // Try wlan0 first, then eth0
+  for (const ifaceName of ['wlan0', 'eth0']) {
+    const iface = interfaces[ifaceName];
+    if (iface) {
+      for (const addr of iface) {
+        if (addr.family === 'IPv4' && !addr.internal) {
+          return addr.address;
+        }
+      }
+    }
+  }
+  
+  return '0.0.0.0';
+}
+
+// Get MAC address
+function getMACAddress(iface = 'wlan0') {
+
+  // const os = require('os');
+  // const interfaces = os.networkInterfaces();
+  if(interfaces[iface]) {
+    return interfaces[iface][0].mac;
+  }
+  
+  return 'Unknown';
+}
+
+ 
+// WiFi Scan
+// app.get('/api/network/wifi/scan', async (req, res) => {
+//   const { stdout } = await execPromise('nmcli -t -f SSID,SIGNAL,SECURITY device wifi list');
+//   const networks = stdout.trim().split('\n').map(line => {
+//     const [ssid, signal, security] = line.split(':');
+//     return { SSID: ssid, ssid, signal: `-${100 - parseInt(signal)}`, security: security !== '--' };
+//   });
+//   res.json({ success: true, networks });
+// });
+
+
+
+app.get('/api/network/wifi/scan', async (req, res) => {
+  try {
+    console.log('📡 Scanning WiFi networks...');
+    
+    // Linux: Use nmcli or iwlist
+    let networks = [];
+    
+    try {
+     //    rfkill list 
+      //   rfkill unblock all or  sudo rfkill unblock wifi
+      //    sudo nmcli device set wlan0 managed yes
+      //nmcli radio //Check WiFi radio status   nmcli radio wifi on/nmcli radio wifi off
+        // sudo nmcli radio wifi off
+       // ip link show wlan0 
+        // sudo ip link set wlan0 down
+        // sudo ip link set wlan0 up
+        // sudo nmcli radio wifi on
+        // sudo systemctl restart NetworkManager
+        // nmcli device  or nmcli device status  or nmcli dev wifi list --rescan yes (type of network list  DEVICE         TYPE      STATE      CONNECTION )
+      // Try nmcli first (NetworkManager)   
+      //run  nmcli dev wifi list or nmcli device wifi list
+       //  nmcli -t -f SSID,SIGNAL,SECURITY dev wifi list --rescan yes
+     //  nmcli dev wifi connect "MyWifi" password "mypassword"  /Connect to WiFi
+     // nmcli connection show // Show saved WiFi networks
+     //   nmcli connection delete "HomeWifi" Forget a network
+// Option	Meaning
+// -t	terse output (script friendly)
+// -f	fields to show
+// SSID,SIGNAL,SECURITY	only show these columns 
+//ALL FIELD IN-USE  BSSID              SSID                     MODE   CHAN  RATE        SIGNAL  BARS  SECURITY 
+
+        const { stdout } = await execPromise('nmcli -t -f SSID,SIGNAL,SECURITY device wifi list --rescan yes');
+        console.log(' stdout nmcli  available = ',stdout);
+
+      const lines = stdout.trim().split('\n');
+      networks = lines.map(line => {
+        const [ssid, signal, security] = line.split(':');
+        return {
+          SSID: ssid,
+          ssid: ssid,
+          signal: signal ? `-${100 - parseInt(signal)}` : '-70',
+          security: security && security !== '--'
+        };
+      }).filter(n => n.ssid && n.ssid !== '');
+      
+    } catch (nmcliError) {
+      console.log('nmcli not available, trying iwlist...');
+      
+      // Fallback to iwlist
+      try {
+        const { stdout } = await execPromise('sudo iwlist wlan0 scan');
+        
+        // Parse iwlist output
+        const cells = stdout.split('Cell ');
+           networks = cells.slice(1).map(cell => {
+          const ssidMatch = cell.match(/ESSID:"([^"]+)"/);
+          const signalMatch = cell.match(/Signal level=(-?\d+)/);
+          const securityMatch = cell.match(/Encryption key:(on|off)/);
+          
+          return {
+            SSID: ssidMatch ? ssidMatch[1] : '',
+            ssid: ssidMatch ? ssidMatch[1] : '',
+            signal: signalMatch ? signalMatch[1] : '-70',
+            security: securityMatch ? securityMatch[1] === 'on' : false
+          };
+        }).filter(n => n.ssid);
+        
+      } catch (iwlistError) {
+        throw new Error('No WiFi scanning tool available (tried nmcli and iwlist)');
+      }
+    }
+    
+    // Update configuration
+   // CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.WIFI_AVAILABLE_LIST = networks;
+    
+    console.log(`✅ Found ${networks.length} WiFi networks`);
+    
+    res.json({
+      success: true,
+      networks: networks
+    });
+    
+  } catch (error) {
+    console.error('WiFi scan error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+
+
+// // Network Apply
+// app.post('/api/network/apply', async (req, res) => {
+
+//   const config = req.body;
+//   if (config.SYSTEM_NETWORK_MODE === 'STATIC') {
+//     await network.addIP('wlan0', config.STATIC_IP_ADDRESS + '/24');
+//     await network.addGateway(config.GATE_WAY);
+//   }
+  
+//   if (config.WIFI_SSID) {
+//     await execPromise(`nmcli device wifi connect "${config.WIFI_SSID}" password "${config.WIFI_PASSWORD}"`);
+//   }
+  
+//   res.json({ success: true });
+// });
 
 
 let  ffmpegProcess = null;
@@ -124,9 +483,9 @@ let CAMERA_CONFIGURATION = {
   camera_network: {
 
     CAMERA_ONLINE:false,
-    ip:           "192.168.29.55",   // ← your camera IP
-    subnet_mask:  "255.255.255.0",
-    gate_way:     "192.168.100.1",
+    ip:           "192.168.100.86",   // ← your camera IP
+    SUBNET_MASK:  "255.255.255.0",
+    GATE_WAY:     "192.168.100.1",
     DNS_Address:  "8.8.8.8",
     MAC_Address : "D4:E0:8E:99:3E:DF",
     http_port:    80,
@@ -145,13 +504,18 @@ let CAMERA_CONFIGURATION = {
 
   },
 
- SYSTEM_NETWORK: {
-    CONNECT_SYSTEM_NETWORK : "WIFI", // ETHERNET or WIFI 
+  SBC_SYSTEM_NETWORK: {
+  
+    CONNECT_SYSTEM_NETWORK : "WIFI", // ETHERNET or WIFI , ETHERNET&WIFI
     SYSTEM_NETWORK_MODE: "DHCP",     // DHCP or STATIC
-    IP_ADDRESS :  "192.168.29.54",   // ← your camera IP
-    GATE_WAY:     "192.168.100.1",
+    STATIC_IP_ADDRESS :  "192.168.29.15",   // ← your camera IP
+    DYNAMIC_IP_ADDRESS :  "",   // ← your camera IP
+    GATE_WAY:     "192.168.29.2",
+    SUBNET_MASK :  "255.255.255.0",
+    MAC_Address : "D4:E0:8E:99:3E:DF",
     DNS_Address:  "8.8.8.8",
-    WIFI_SSID:  "KHADAS",
+    WIFI_AVAILABLE_LIST :[],
+    WIFI_SSID:  "hemant",
     WIFI_PASSWORD: "KHADAS@1234",
   },
 
@@ -185,6 +549,9 @@ let CAMERA_CONFIGURATION = {
   },
 
 };
+
+
+//console.log(`=========================${CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.STATIC_IP_ADDRESS}`);
 
 
 CAMERA_CONFIGURATION_CAP = {
@@ -293,14 +660,16 @@ app.get("/api/recording/status", (req, res) => {
 });
 
 
-app.get("/api/camera/config", (req, res) => {
+app.get("/api/camera/config", async(req, res) => {
 
-  console.log("GET CAMERA CONFIGURATION REQUEST");
-  
-  if ( !CAMERA_CONFIGURATION || !CAMERA_CONFIGURATION_CAP) {
+     console.log("GET CAMERA CONFIGURATION REQUEST");
+  if (!CAMERA_CONFIGURATION || !CAMERA_CONFIGURATION_CAP) {
     console.error("GET CAMERA CONFIGURATION ERROR:", CAMERA_CONFIGURATION_CAP);
     return res.status(500).json({ error: "CONFIGURATION_SETTING_FAILED" });
   }
+
+   CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.DYNAMIC_IP_ADDRESS  = await getCurrentIPAddress();
+   
  
   res.json({
     success: true,
@@ -403,7 +772,7 @@ const CAMERA_ALLOWED = {
   ],
 
   NETWORK: Object.keys(CAMERA_CONFIGURATION.camera_network),
-
+  SYSTEM_NETWORK: Object.keys(CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK),
   IMAGE: Object.keys(CAMERA_CONFIGURATION.IMAGE_SETTINGS),
 
   PTZ: Object.keys(CAMERA_CONFIGURATION.PTZ_STATE)
@@ -475,7 +844,7 @@ app.post("/api/camera/config", (req, res) => {
 
     /* ---------------- NETWORK UPDATE ---------------- */
 
-    if (body.camera_network) {
+    if (body.camera_network){
 
       updateObject(CAMERA_CONFIGURATION.camera_network,body.camera_network,CAMERA_ALLOWED.NETWORK);
 
@@ -483,6 +852,15 @@ app.post("/api/camera/config", (req, res) => {
        CAMERA_CONFIGURATION.camera_network.httpCgiBase = `http://${CAMERA_CONFIGURATION.camera_network.httpUser}:${CAMERA_CONFIGURATION.camera_network.httpPass}@${CAMERA_CONFIGURATION.camera_network.ip}`;
        stopMediaMtx(); // START AUTOMATICALLY 
       // setTimeout(startMediaMtx,3000);
+    }
+
+     
+
+    if (body.SBC_SYSTEM_NETWORK) {
+      updateObject(CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK,body.SBC_SYSTEM_NETWORK,CAMERA_ALLOWED.SYSTEM_NETWORK);
+      network.addIP("eth0",`${CAMERA_CONFIGURATION.camera_network.GATE_WAY}/24`);
+      setStaticIP(CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.STATIC_IP_ADDRESS,CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.GATE_WAY);
+    // network.addIP("eth0",`${CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.STATIC_IP_ADDRESS}/24`);
     }
 
 
@@ -631,37 +1009,33 @@ CAMERA_CONFIGURATION.camera_network.rtspUrl     = `rtsp://${CAMERA_CONFIGURATION
 CAMERA_CONFIGURATION.camera_network.httpCgiBase = `http://${CAMERA_CONFIGURATION.camera_network.httpUser}:${CAMERA_CONFIGURATION.camera_network.httpPass}@${CAMERA_CONFIGURATION.camera_network.ip}`;
 
 const CONFIG_FILE = path.join(__dirname, "camera_config.json");
-
 function saveCameraConfig() {
 
   const tempFile = CONFIG_FILE + ".tmp";
-
-  fs.writeFileSync(tempFile,
-    JSON.stringify(CAMERA_CONFIGURATION, null, 2)
-  );
-
+  fs.writeFileSync(tempFile,JSON.stringify(CAMERA_CONFIGURATION, null, 2));
   fs.renameSync(tempFile, CONFIG_FILE);
 }
 
-function loadCameraConfig() {
+
+function loadCameraConfig(){
   try {
 
-    if (fs.existsSync(CONFIG_FILE)) {
+    if (fs.existsSync(CONFIG_FILE)){
       const data = fs.readFileSync(CONFIG_FILE, "utf8");
       CAMERA_CONFIGURATION = JSON.parse(data);
-
       console.log("✅ Camera configuration loaded from file");
     } else {
       console.log("⚡❌ No saved config → using defaults");
       saveCameraConfig(); // create file first time
     }
 
-  } catch (err) {
+  } catch (err){
     console.error("❌ Config load failed:", err);
   }
 }
 
-loadCameraConfig();
+
+
 
 
 function isSafeName(name) {
@@ -1109,7 +1483,7 @@ async function CHECK_CAMERA_ONLINE(){
  
     } catch (error) {
         CAMERA_CONFIGURATION.camera_network.CAMERA_ONLINE = false; 
-      console.log("⚠️ERROR IN CHECK_CAMERA_OFFLINE"); 
+      console.log("⚠️ERROR IN CHECK_CAMERA_OFFLINE",error.message); 
     }
 
 }
@@ -1198,9 +1572,17 @@ app.get("/api/ptz/info/serial",  async (req, res) => res.json(await cgiRequest("
 // ============================================================================
 app.get("/api/ptz/home", async (req, res) => {
   console.log("/api/ptz/home REQUES RECIEVE");
+   
+     if (CAMERA_CONFIGURATION.camera_network.CAMERA_ONLINE == false) { 
+        console.log("⚠️CHECK_CAMERA_OFFLINE RETURN RECORDING_ERROR"); 
+        return res.status(400).json({ error: "CHECK_CAMERA_OFFLINE" });
+       // CHECK_CAMERA_ONLINE(); 
+       }
+  CAMERA_CONFIGURATION.PTZ_STATE.moving = true ;
   const result = await cgiRequest("/cgi-bin/ptzctrl.cgi?ptzcmd&home" ,`PTZ : home` );
   CAMERA_CONFIGURATION.PTZ_STATE.moving = false;
  // broadcastStatus();
+ 
  res.json({ success: result.ok ,data : result.data});
 });
 
@@ -1209,7 +1591,14 @@ app.get("/api/ptz/home", async (req, res) => {
 // GET  /api/ptz/reset
 // ============================================================================
 app.get("/api/ptz/reset", async (req, res) => {
+
+    if (CAMERA_CONFIGURATION.camera_network.CAMERA_ONLINE == false) { 
+        console.log("⚠️CHECK_CAMERA_OFFLINE RETURN RECORDING_ERROR"); 
+        return res.status(400).json({ error: "CHECK_CAMERA_OFFLINE" });
+       // CHECK_CAMERA_ONLINE(); 
+       }
   const result = await cgiRequest("/cgi-bin/param.cgi?pan_tiltdrive_reset"  ,`PTZ : reset ` );
+  
   res.json({ success: result.ok ,data : result.data});
 });
 
@@ -1217,6 +1606,12 @@ app.get("/api/ptz/reset", async (req, res) => {
 // ROUTE: PTZ STOP
 // ============================================================================
 app.get("/api/ptz/stop", async (req, res) => {
+
+    if (CAMERA_CONFIGURATION.camera_network.CAMERA_ONLINE == false) { 
+        console.log("⚠️CHECK_CAMERA_OFFLINE RETURN RECORDING_ERROR"); 
+        return res.status(400).json({ error: "CHECK_CAMERA_OFFLINE" });
+       // CHECK_CAMERA_ONLINE(); 
+       }
 
   const ps = CAMERA_CONFIGURATION.PTZ_STATE.defaultPanSpeed;
   const ts = CAMERA_CONFIGURATION.PTZ_STATE.defaultTiltSpeed;
@@ -1235,6 +1630,12 @@ app.get("/api/ptz/stop", async (req, res) => {
  //GET  /api/ptz/move?dir=PTZSTOP
 // ============================================================================
 app.get("/api/ptz/move", async (req, res) => {
+
+    if (CAMERA_CONFIGURATION.camera_network.CAMERA_ONLINE == false) { 
+        console.log("⚠️CHECK_CAMERA_OFFLINE RETURN RECORDING_ERROR"); 
+        return res.status(400).json({ error: "CHECK_CAMERA_OFFLINE" });
+       // CHECK_CAMERA_ONLINE(); 
+       }
   
   const dir = (req.query.dir || "PTZSTOP").toUpperCase();
   const ps  = Math.min(24, Math.max(1, parseInt(req.query.ps  || CAMERA_CONFIGURATION.PTZ_STATE.defaultPanSpeed)));
@@ -1243,15 +1644,19 @@ app.get("/api/ptz/move", async (req, res) => {
   const VALID = ["UP","DOWN","LEFT","RIGHT","LEFTUP","RIGHTUP","LEFTDOWN","RIGHTDOWN","PTZSTOP","HOME"];
   if (!VALID.includes(dir)) return res.status(400).json({ error: "Invalid direction /api/ptz/move" });
  let result =null;
-  if(dir === "HOME"){
+ CAMERA_CONFIGURATION.PTZ_STATE.moving = true ;
+  
+ if(dir === "HOME"){
      result = await cgiRequest(`/cgi-bin/ptzctrl.cgi?ptzcmd&${dir.toLowerCase()}`);
   }else{
   const ep  = dir === "PTZSTOP"? `/cgi-bin/ptzctrl.cgi?ptzcmd&ptzstop&${ps}&${ts}` : `/cgi-bin/ptzctrl.cgi?ptzcmd&${dir.toLowerCase()}&${ps}&${ts}`;
   result = await cgiRequest(ep ,`PTZ : ${dir}` );
   CAMERA_CONFIGURATION.PTZ_STATE.moving = dir !== "PTZSTOP";
   }
+
   //broadcastStatus();
   res.json({ success: result.ok,data : result.data,direction: dir, pan_speed: ps, tilt_speed: ts });
+  CAMERA_CONFIGURATION.PTZ_STATE.moving = false;
 }); 
 
 
@@ -1272,6 +1677,12 @@ app.get("/api/ptz/move", async (req, res) => {
 // ============================================================================
 
 app.get("/api/ptz/image_setting", async (req, res) => {
+
+    if (CAMERA_CONFIGURATION.camera_network.CAMERA_ONLINE == false) { 
+        console.log("⚠️CHECK_CAMERA_OFFLINE RETURN RECORDING_ERROR"); 
+        return res.status(400).json({ error: "CHECK_CAMERA_OFFLINE" });
+       // CHECK_CAMERA_ONLINE(); 
+       }
 
    const mode = (req.query.mode).toUpperCase();
    const levelInt = Math.max(0, Math.min(14, parseInt(req.query.level)));
@@ -1304,15 +1715,21 @@ app.get("/api/ptz/image_setting", async (req, res) => {
 
 app.post("/api/ptz/position", async (req, res) => {
 
+    if (CAMERA_CONFIGURATION.camera_network.CAMERA_ONLINE == false) { 
+        console.log("⚠️CHECK_CAMERA_OFFLINE RETURN RECORDING_ERROR"); 
+        return res.status(400).json({ error: "CHECK_CAMERA_OFFLINE" });
+       // CHECK_CAMERA_ONLINE(); 
+       }
+
   const { mode = "ABS", ps = 12, ts = 10, pan = "0000", tilt = "0000" } = req.body;
 
   if (!["ABS","REL"].includes(mode.toUpperCase()))
     return res.status(400).json({ error: "mode must be ABS or REL" });
-
+ CAMERA_CONFIGURATION.PTZ_STATE.moving = true ;
   const ep = `/cgi-bin/ptzctrl.cgi?ptzcmd&${mode.toLowerCase()}&${ps}&${ts}&${pan}&${tilt}`;
   const result = await cgiRequest(ep);
-  CAMERA_CONFIGURATION.PTZ_STATE.moving = false;
   res.json({ success: result.ok, data : result.data,mode, pan, tilt });
+   CAMERA_CONFIGURATION.PTZ_STATE.moving = false ;
 });
 
 
@@ -1329,9 +1746,10 @@ app.post("/api/ptz/position", async (req, res) => {
 
    const ZOOM_POSITION    = Math.min(4000, Math.max(0, parseInt(ZOOMPOSITION || CAMERA_CONFIGURATION.PTZ_STATE.ZOOM_POS_FIXED)));
    const zs     = Math.min(7, Math.max(1, parseInt(ZOOMSPEED || CAMERA_CONFIGURATION.PTZ_STATE.defaultZoomSpeed)));
-   
+   CAMERA_CONFIGURATION.PTZ_STATE.moving = true ;
    const result = await cgiRequest(`/cgi-bin/ptzctrl.cgi?ptzcmd&zoomto&${zs}&${ZOOM_POSITION}`,`call ptz/fixed_position_zoom : ${ZOOM_POSITION}&${zs}`);
    console.log("📡 CGI FIXED_ZOOM_POSITION RESULT : ", result);
+   CAMERA_CONFIGURATION.PTZ_STATE.moving = false ;
    return { success: result.ok, data : result.data, zoom_position: ZOOM_POSITION, zoom_speed: zs };
 
 }
@@ -1339,24 +1757,44 @@ app.post("/api/ptz/position", async (req, res) => {
 
 app.get("/api/ptz/zoom_position", async (req, res) => {
 
+    if (CAMERA_CONFIGURATION.camera_network.CAMERA_ONLINE == false) { 
+        console.log("⚠️CHECK_CAMERA_OFFLINE RETURN RECORDING_ERROR"); 
+        return res.status(400).json({ error: "CHECK_CAMERA_OFFLINE" });
+       // CHECK_CAMERA_ONLINE(); 
+       }
+
   const ZOOM_POSITION = Math.min(4000, Math.max(0, parseInt(req.query.pos || CAMERA_CONFIGURATION.PTZ_STATE.ZOOM_POS_FIXED)));
   const zs     = Math.min(7, Math.max(1, parseInt(req.query.zs || CAMERA_CONFIGURATION.PTZ_STATE.defaultZoomSpeed)));
- const result = await FIXED_ZOOM_POSITION(ZOOM_POSITION,zs);
+  const result = await FIXED_ZOOM_POSITION(ZOOM_POSITION,zs);
   res.json(result);
 });
 
 
 app.get("/api/ptz/zoom", async (req, res) => {
+
+    if (CAMERA_CONFIGURATION.camera_network.CAMERA_ONLINE == false) { 
+        console.log("⚠️CHECK_CAMERA_OFFLINE RETURN RECORDING_ERROR"); 
+        return res.status(400).json({ error: "CHECK_CAMERA_OFFLINE" });
+       // CHECK_CAMERA_ONLINE(); 
+       }
+
   const action = (req.query.action || "ZOOMSTOP").toUpperCase();
   const zs     = Math.min(7, Math.max(1, parseInt(req.query.zs || CAMERA_CONFIGURATION.PTZ_STATE.defaultZoomSpeed)));
   const VALID = ["ZOOMIN","ZOOMOUT","ZOOMSTOP"];
   if (!VALID.includes(action)) return res.status(400).json({ error: "Invalid zoom action" });
-
+  CAMERA_CONFIGURATION.PTZ_STATE.moving = true;
   const result = await cgiRequest(`/cgi-bin/ptzctrl.cgi?ptzcmd&${action.toLowerCase()}&${zs}`,`ptz/zoom : ${action.toLowerCase()}&${zs}`);
   res.json({ success: result.ok, data : result.data,action, zoom_speed: zs });
+    CAMERA_CONFIGURATION.PTZ_STATE.moving = false ;
 });
 
 app.get("/api/ptz/focus_mode", async (req,res)=>{
+
+    if (CAMERA_CONFIGURATION.camera_network.CAMERA_ONLINE == false) { 
+        console.log("⚠️CHECK_CAMERA_OFFLINE RETURN RECORDING_ERROR"); 
+        return res.status(400).json({ error: "CHECK_CAMERA_OFFLINE" });
+       // CHECK_CAMERA_ONLINE(); 
+       }
 
       const mode = (req.query.mode || "AUTO").toUpperCase();
       const VALID = ["AUTO","MANUAL"];
@@ -1369,8 +1807,9 @@ app.get("/api/ptz/focus_mode", async (req,res)=>{
     }else if(mode === "MANUAL"){  
         ep = `/cgi-bin/ptzctrl.cgi?ptzcmd&lock_mfocus`;
     }
-
+    CAMERA_CONFIGURATION.PTZ_STATE.moving = true;
     const result = await cgiRequest(ep,"Focus Mode");
+    CAMERA_CONFIGURATION.PTZ_STATE.moving = false;
      res.json({success:result.ok, data : result.data, mode});
 });
 
@@ -1384,12 +1823,19 @@ app.get("/api/ptz/focus_mode", async (req,res)=>{
 // ============================================================================
 app.get("/api/ptz/focus", async (req, res) => {
 
+    if (CAMERA_CONFIGURATION.camera_network.CAMERA_ONLINE == false) { 
+        console.log("⚠️CHECK_CAMERA_OFFLINE RETURN RECORDING_ERROR"); 
+        return res.status(400).json({ error: "CHECK_CAMERA_OFFLINE" });
+       // CHECK_CAMERA_ONLINE(); 
+       }
+
   const action = (req.query.action || "FOCUSSTOP").toUpperCase();
   const fs     = Math.min(7, Math.max(1, parseInt(req.query.fs || CAMERA_CONFIGURATION.PTZ_STATE.defaultFocusSpeed)));
   const VALID = ["FOCUSIN","FOCUSOUT","FOCUSSTOP"];
   if (!VALID.includes(action)) return res.status(400).json({ error: "Invalid focus action" });
-
+CAMERA_CONFIGURATION.PTZ_STATE.moving = true;
   const result = await cgiRequest(`/cgi-bin/ptzctrl.cgi?ptzcmd&${action.toLowerCase()}&${fs}`,`ptz/focus : ${action.toLowerCase()}&${fs}`);
+  CAMERA_CONFIGURATION.PTZ_STATE.moving = false;
   res.json({ success: result.ok, data : result.data,action, focus_speed: fs });
 });
 
@@ -1398,14 +1844,29 @@ app.get("/api/ptz/focus", async (req, res) => {
 // GET  /api/ptz/zoom-to?zs=4&pos=0000  (0000=wide … 4000=tele)
 // ============================================================================
 app.get("/api/ptz/zoom-to", async (req, res) => {
+
+    if (CAMERA_CONFIGURATION.camera_network.CAMERA_ONLINE == false) { 
+        console.log("⚠️CHECK_CAMERA_OFFLINE RETURN RECORDING_ERROR"); 
+        return res.status(400).json({ error: "CHECK_CAMERA_OFFLINE" });
+       // CHECK_CAMERA_ONLINE(); 
+       }
   const zs  = Math.min(7, Math.max(1, parseInt(req.query.zs  || 4)));
   const pos = req.query.pos || "0000";
+  CAMERA_CONFIGURATION.PTZ_STATE.moving = true;
   const result = await cgiRequest(`/cgi-bin/ptzctrl.cgi?ptzcmd&zoomto&${zs}&${pos}`,`ptz/zoom-to : ${zs}&${pos}`);
   res.json({ success: result.ok,data : result.data, zoom_speed: zs, position: pos });
+  CAMERA_CONFIGURATION.PTZ_STATE.moving = false;
 });
 
 // Preset Set
 app.get("/api/ptz/preset/set/:id", async (req, res) => {
+
+    if (CAMERA_CONFIGURATION.camera_network.CAMERA_ONLINE == false) { 
+        console.log("⚠️CHECK_CAMERA_OFFLINE RETURN RECORDING_ERROR"); 
+        return res.status(400).json({ error: "CHECK_CAMERA_OFFLINE" });
+       // CHECK_CAMERA_ONLINE(); 
+       }
+
   const id = parseInt(req.params.id);
   if (isNaN(id) || (id > 89 && id < 100) || id > 254) {
     return res.status(400).json({ error: "Invalid preset ID" });
@@ -1416,6 +1877,13 @@ app.get("/api/ptz/preset/set/:id", async (req, res) => {
 
 // Preset Call
 app.get("/api/ptz/preset/call/:id", async (req, res) => {
+
+    if (CAMERA_CONFIGURATION.camera_network.CAMERA_ONLINE == false) { 
+        console.log("⚠️CHECK_CAMERA_OFFLINE RETURN RECORDING_ERROR"); 
+        return res.status(400).json({ error: "CHECK_CAMERA_OFFLINE" });
+       // CHECK_CAMERA_ONLINE(); 
+       }
+       
   const id = parseInt(req.params.id);
   if (isNaN(id) || id < 1  || id > 254) {
     return res.status(400).json({ error: "Invalid preset ID" });
@@ -1601,7 +2069,6 @@ function detectSdCardAsync(){
      
 }
 
-detectSdCardAsync();
 
 app.get("/api/sdcard/check", async (req, res) => {
 
@@ -2326,7 +2793,7 @@ async function CAMERA_USB_PORT_ERROR_SOLVE(state) {
 // child.kill('SIGHUP');  // Hangup - terminal closed (1)
 // child.kill('SIGQUIT'); // Quit with core dump (3)
 
-async function killFFmpeg(reason = "UNKNOWN") {
+async function killFFmpeg(reason = "UNKNOWN"){
 
      console.log(`⛔🧹KILLING FFMPEG: ${reason}`);
   if (!ffmpegProcess || ffmpegStopping){
@@ -2340,17 +2807,20 @@ async function killFFmpeg(reason = "UNKNOWN") {
   // } 
      
   try {
+
      ffmpegStopping = true;
      lastStopTs = now;
      console.log("📝 killFFmpeg(graceful shutdown) PID VALUE : ",ffmpegProcess.pid);
     
     if (ffmpegProcess.stdout) {
+      console.log("📝 killFFmpeg(graceful stdout) clean : ");
       // ffmpegProcess.stdout.pause();
        ffmpegProcess.stdout.removeAllListeners("data");
       // ffmpegProcess.stdout.removeAllListeners();
     }
     
     if (ffmpegProcess.stderr) {
+       console.log("📝 killFFmpeg(graceful stdout) clean : ");
      // ffmpegProcess.stderr.pause();
       ffmpegProcess.stderr.removeAllListeners("data");
       //ffmpegProcess.stderr.removeAllListeners();
@@ -2363,11 +2833,12 @@ async function killFFmpeg(reason = "UNKNOWN") {
     ffmpegProcess.kill("SIGINT");
     
     await new Promise(resolve => { ffmpegProcess.once("close", code => { 
-          resolve(); //console.log(` killFFmpeg FFMPEG CLOSED: ${code}`); 
+          console.log(` killFFmpeg FFMPEG CLOSED: ${code}`);
+          resolve(); 
             });
         });
 
-      await new Promise(r => setTimeout(r,300));
+      await new Promise(r => setTimeout(r,100));
 
     if(ffmpegProcess && !ffmpegProcess.killed){
       console.warn("⚠️ ERROR killFFmpeg ....Force SIGKILL" );
@@ -2467,7 +2938,7 @@ function RUN_FFMPEG_ARGUMENT_COMMAND({ outputPath = null, enableLive = false }){
     "-map", "0:v",
     "-c:v", "copy",
     //"-c:a", "aac",
-    "-b:a", "128k",
+   // "-b:a", "128k",
     "-avoid_negative_ts", "make_zero",  // ← Fix timestamp issues
     "-flush_packets","1",
     "-use_wallclock_as_timestamps", "1"
@@ -2541,7 +3012,7 @@ function RUN_FFMPEG_ARGUMENT_COMMAND({ outputPath = null, enableLive = false }){
      "-stimeout", "5000000",
      "-i", CAMERA_CONFIGURATION.camera_network.rtspUrl,
      "-c:v", "copy",
-      "-c:a", "copy",
+     // "-c:a", "copy",
      "-map", "0:v",
      "-avoid_negative_ts", "make_zero",
      "-use_wallclock_as_timestamps", "1",
@@ -2628,14 +3099,10 @@ ffmpegProcess.stdin.on('error', (err) => {
 // EACCES → No permission to execute
 // EPERM  → Operation not permitted
 
-     ffmpegProcess.on('close', (code, signal) => {
- 
+  ffmpegProcess.on('close', (code, signal) => {
     ffmpegProcess = null;
     ffmpegStopping = false;
-    RECORDING_STATE.active = false;
-   console.log(`🧹 FFMPEG CLOSED EVENT code : ${code} kksignal: ${signal}`);
-   
-   
+    console.log(`🧹 FFMPEG CLOSED EVENT code : ${code} kksignal: ${signal}`);
    });
 
 
@@ -2670,6 +3137,7 @@ ffmpegProcess.on('error', (error) => {
     
   });
  
+
 }
 
 
@@ -2704,7 +3172,7 @@ app.post("/start", async (req, res) => {
 
       if (ffmpegProcess && !ffmpegStopping){
           await killFFmpeg("CLEANUP ON NEW RECORDING START");
-          await new Promise(r => setTimeout(r, 1500));
+          await new Promise(r => setTimeout(r, 100));
       }
      
     if(ffmpegProcess != null ){
@@ -2772,18 +3240,20 @@ app.post("/pause", async (req, res) => {
   console.log("⏸ PAUSE request received");
 
   if (!RECORDING_STATE.active || RECORDING_STATE.paused) {
-     console.log("INVALID_PAUSED_STATE: ",RECORDING_STATE.active );
+     console.log("INVALID PAUSED_STATE: ",RECORDING_STATE.paused );
+     console.log("INVALID START_REC_STATE: ",RECORDING_STATE.active );
     return res.status(400).json({ error: "INVALID_PAUSED_STATE" });
   }
 
   try {
 
-    RECORDING_STATE.paused = true;
-    RECORDING_STATE.PAUSED_AT_TIME = Date.now(); // ✅ freeze timer
-    RECORDING_STATE.status = "PAUSED";
+   
 
      if(ffmpegProcess && ffmpegStopping == false ){
-         await killFFmpeg("PAUSED_STATE STOP FFmpeg...");
+         RECORDING_STATE.paused = true;
+         RECORDING_STATE.PAUSED_AT_TIME = Date.now(); // ✅ freeze timer
+         RECORDING_STATE.status = "PAUSED";
+         await killFFmpeg("PAUSED_STATE STOP FFmpeg.....");
         console.log("⏸ RECORDING PAUSED at", RECORDING_STATE.PAUSED_AT_TIME);
 
     //   return res.json({
@@ -2801,37 +3271,50 @@ app.post("/pause", async (req, res) => {
       RECORDING_STATE :CAMERA_STATE_STATUS()
     });
 
-    }else{ 
-           console.error("PAUSE ffmpegProcess EEROR :");
-           res.status(500).json({ error: "PAUSE_FAILED" });
-          }
+  }else{ 
+          console.error("PAUSE ffmpegProcess EEROR :");
+          res.status(500).json({ error: "PAUSE_FAILED" });
+        }
 
-  } catch (err) {
+  }catch (err){
     console.error("PAUSE_FAILED:", err);
     res.status(500).json({ error: "PAUSE_FAILED" });
   }
+
 });
 
 
 
 
-app.post("/resume", (req, res) => {
+app.post("/resume", async(req, res) => {
 
     console.log("▶ RESUMED request RECIEVE");
     if (!RECORDING_STATE.active || !RECORDING_STATE.paused){
-      console.log("▶INVALID_RESUME_STATE : ",RECORDING_STATE.active ,"PAUSED : ",RECORDING_STATE.paused);
-    return res.status(400).json({ error: "INVALID_RESUME_STATE" });
+       console.log("▶INVALID_RESUME_STATE : ",RECORDING_STATE.active ,"PAUSED : ",RECORDING_STATE.paused);
+       return res.status(400).json({ error: "INVALID_RESUME_STATE" });
       }
 
   try{
 
+   
    const baseName = RECORDING_STATE.filename; 
    console.log("RESUME baseName NAME ",baseName);
 
    const segmentPath = getNextSegmentPath(baseName);
    console.error("RESUME NEW SEGMENT NAME ",segmentPath);
 
-   
+   if (ffmpegProcess && !ffmpegStopping){
+       RECORDING_STATE.paused = false;
+       await killFFmpeg("CLEANUP ON NEW RESUMED START");
+       await new Promise(r => setTimeout(r, 200));
+      }
+     
+    if(ffmpegProcess != null ){
+    console.log("RESUME_CAMERA_ALREADY_RUNNING : ",ffmpegStopping);
+    return res.status(500).json({ error: "RESUME_CAMERA_PROCESS_RUNNING" });
+
+  }
+
     WESOCKET_SEND_DATA_CONNECTED_FLAG = true;
     RUN_FFMPEG_ARGUMENT_COMMAND({ enableLive: LIVE_STREAM_ENABLED,outputPath: segmentPath});
     setTimeout(() => { 
@@ -2879,26 +3362,55 @@ async function mergeSegmentsWithRetry(segments, finalMp4, maxRetries = 3){
 
       const missingFiles = [];
       const emptyFiles   = [];
+      const validSegments = [];
+
+      // for (const file of segments){
+      //   if (!fs.existsSync(file)){
+      //        missingFiles.push(file);
+      //   }else{
+      //      const stats = fs.statSync(file);
+      //      if(stats.size === 0){
+      //       emptyFiles.push(file);}
+      //   }
+      // }
       
-      for (const file of segments){
-        if (!fs.existsSync(file)){
-             missingFiles.push(file);
-        }else{
-           const stats = fs.statSync(file);
-           if(stats.size === 0){emptyFiles.push(file);}
-        }
-      }
+      // if (missingFiles.length > 0) {
+      //   throw new Error(`Missing segments: ${missingFiles.join(', ')}`);
+      // }
       
-      if (missingFiles.length > 0) {
-        throw new Error(`Missing segments: ${missingFiles.join(', ')}`);
-      }
-      
-      if (emptyFiles.length > 0) {
-        console.log(`⚠️ Empty segments found: ${emptyFiles.join(', ')}`);
-      }
+      // if (emptyFiles.length > 0) {
+      //   console.log(`⚠️ Empty segments found: ${emptyFiles.join(', ')}`);
+      // }
+
+    
+
+for (const file of segments){
+
+  if (!fs.existsSync(file)){
+    console.warn("❌ Missing segment:", file);
+    continue;
+  }
+
+  const stats = fs.statSync(file);
+
+  if (stats.size < 1000){   // less than 1KB = broken
+    console.warn("⚠️ Ignoring corrupted segment:", file);
+    continue;
+  }
+
+  validSegments.push(file);
+}
+
+if (validSegments.length === 0){
+  throw new Error("NO_VALID_SEGMENTS_FOUND");
+}
+
+console.log("✅ Valid segments:", validSegments.length);
       
       const segmentListFile = path.join(videosDir, `rec_video_segments_${Date.now()}.txt`);
-      fs.writeFileSync(segmentListFile, segments.map(f => `file '${f}'`).join("\n"));
+     // fs.writeFileSync(segmentListFile, segments.map(f => `file '${f}'`).join("\n"));
+      fs.writeFileSync(segmentListFile,validSegments.map(f => `file '${f}'`).join("\n"));
+
       console.log("📄 Segment list created:", segmentListFile);
       
       const result = await new Promise((resolve, reject) => {
@@ -3049,13 +3561,13 @@ app.post("/stop", async (req, res) => {
      RECORDING_STATE.REC_VIDEO_DURATION = RECORDING_STATE.REC_STOP_TIME - RECORDING_STATE.REC_START_TIME;
 
     if (ffmpegProcess && ffmpegStopping == false) {
-        killFFmpeg("STOP RECORDING REQUEST");
+        await killFFmpeg("STOP RECORDING REQUEST");
      }
 
-    await new Promise(r => setTimeout(r, 500));
+      await new Promise(r => setTimeout(r, 500));
 
     let finalMp4 = RECORDING_STATE.FINAL_FILE_SAVE_PATH;
-    if (!finalMp4.endsWith(".mp4")) {
+    if (!finalMp4.endsWith(".mp4")){
          finalMp4 += ".mp4";
      }console.log("🎬 Final MP4 PATH :", finalMp4);
     
@@ -3808,10 +4320,9 @@ if (process.env.NODE_ENV !== "production"){
 
 
 
-function gracefulShutdown(signal) {
+function gracefulShutdown(signal){
 
   console.log(`\n🛑 SERVER SHUTDOWN (SIGINT) received: ${signal}`);
-
   if (ffmpegProcess) {
    console.log("🧹 Stopping ffmpeg process...");
     ffmpegProcess.kill("SIGINT");
@@ -3819,9 +4330,10 @@ function gracefulShutdown(signal) {
   }
 
   stopMediaMtx();
-      stopMDNS();
-     server.close(() => {
-    console.log("🚪 HTTP server closed");  });
+  stopMDNS();
+
+    server.close(() => { console.log("🚪 HTTP server closed"); });
+
    // releaseLock();
     process.exit(0);
 
@@ -3862,19 +4374,36 @@ server.on("error", err => {
   }
 });
 
+
 ensureHostname();
 cleanupPort(PORT);
 
 
-server.listen(PORT, () => {
+server.listen(PORT, async() => {
 
-  console.log(`Camera server running on http://0.0.0.0:${PORT}`);
-  startMDNS();
-  monitorMDNS();
-  CHECK_CAMERA_ONLINE();
+ loadCameraConfig();
+ detectSdCardAsync();  
+
+ //network.addIP("eth0", "192.168.100.1/24");
+ 
+ network.addIP("eth0",`${CAMERA_CONFIGURATION.camera_network.GATE_WAY}/24`);
+ await setStaticIP(CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.STATIC_IP_ADDRESS,CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.GATE_WAY);
+
+// network.addIP("eth0",`${CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.STATIC_IP_ADDRESS}/24`);
+
+ console.log  (`SYSTEM STATIC_IP_ADDRESS: ${CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.STATIC_IP_ADDRESS}`);
+ CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.DYNAMIC_IP_ADDRESS =  await getCurrentIPAddress();
+ console.log  (`SYSTEM DYNAMIC_IP_ADDRESS:${CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.DYNAMIC_IP_ADDRESS}`);
+ 
+ console.log(`Camera server running on http://0.0.0.0:${PORT}`);
+ startMDNS();
+ monitorMDNS();
+ CHECK_CAMERA_ONLINE();
+ 
 
   setInterval(() =>{
-    if(!RECORDING_STATE.active && ffmpegStopping == false && STOPING_RUNNING_FLAG == false ){
+
+    if(!RECORDING_STATE.active && ffmpegStopping == false && STOPING_RUNNING_FLAG == false  && CAMERA_CONFIGURATION.PTZ_STATE.moving  == false ){
         CHECK_CAMERA_ONLINE();
     }
     

@@ -1,33 +1,43 @@
 {
-  "CAMERA_MODE": "USB",
-  "DEVICE_NODE": "/dev/video1",
+  "CAMERA_MODE": "RTSP",
+  "DEVICE_NODE": "/dev/video0",
   "format": "h264",
   "resolution": "1920x1080",
   "fps": 30,
   "bitrate": "4M",
   "EXTENSION": ".mp4",
+  "ZOOM_IN_FIXED_FLAG": false,
+  "ZOOM_IN_FIXED": 100,
+  "ZOOM_OUT_FIXED": 5,
+  "ZOOM_POS_FIXED": 100,
+  "PTZ_POSITION_STEP": "0005",
+  "PTZ_MULTIPLE_POSITION_STEP": [
+    "0010",
+    "0020",
+    "0050"
+  ],
   "IMAGE_SETTINGS": {
-    "brightness": 7,
-    "contrast": 7,
-    "saturation": 6,
-    "sharpness": 7,
+    "brightness_DEFAULT": 7,
+    "contrast_DEFAULT": 7,
+    "saturation_DEFAULT": 6,
+    "sharpness_DEFAULT": 7,
+    "brightness_CURRENT": 7,
+    "contrast_CURRENT": 7,
+    "saturation_CURRENT": 6,
+    "sharpness_CURRENT": 7,
     "whiteBalance": "auto",
     "exposure": "auto",
     "backlight": false,
     "wdr": false,
     "hue": 7,
     "flip": 0,
-    "mirror": 0,
-    "brightness_CURRENT": 7,
-    "contrast_CURRENT": 7,
-    "saturation_CURRENT": 7,
-    "sharpness_CURRENT": 7
+    "mirror": 0
   },
   "camera_network": {
-    "CAMERA_ONLINE": true,
-    "ip": "192.168.29.54",
-    "subnet_mask": "255.255.255.0",
-    "gate_way": "192.168.100.1",
+    "CAMERA_ONLINE": false,
+    "ip": "192.168.100.86",
+    "SUBNET_MASK": "255.255.255.0",
+    "GATE_WAY": "192.168.100.1",
     "DNS_Address": "8.8.8.8",
     "MAC_Address": "D4:E0:8E:99:3E:DF",
     "http_port": 80,
@@ -41,8 +51,21 @@
     "viscaTcpPort": 5678,
     "viscaUdpPort": 1259,
     "CAMERA_BASE_URL": null,
-    "rtspUrl": "rtsp://admin:admin@192.168.29.54:554/stream1",
-    "httpCgiBase": "http://admin:admin@192.168.29.54"
+    "rtspUrl": "rtsp://admin:admin@192.168.100.86:554/stream1",
+    "httpCgiBase": "http://admin:admin@192.168.100.86"
+  },
+  "SBC_SYSTEM_NETWORK": {
+    "CONNECT_SYSTEM_NETWORK": "WIFI",
+    "SYSTEM_NETWORK_MODE": "DHCP",
+    "STATIC_IP_ADDRESS": "192.168.29.15",
+    "DYNAMIC_IP_ADDRESS": "192.168.29.15",
+    "GATE_WAY": "192.168.29.1",
+    "SUBNET_MASK": "255.255.255.0",
+    "MAC_Address": "D4:E0:8E:99:3E:DF",
+    "DNS_Address": "8.8.8.8",
+    "WIFI_AVAILABLE_LIST": [],
+    "WIFI_SSID": "SENSEWELL_INSTRUMENT",
+    "WIFI_PASSWORD": "12345678"
   },
   "mediamtx": {
     "binary": "./mediamtx",
@@ -72,8 +95,5 @@
       90
     ],
     "moving": false
-  },
-  "ZOOM_IN_FIXED": 100,
-  "ZOOM_OUT_FIXED": 5,
-  "PTZ_POSITION_STEP": "222"
+  }
 }

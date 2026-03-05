@@ -59,7 +59,8 @@ pathDefaults:
 # =========================
 paths:
   live_camera:
-    source: publisher 
+    source: rtsp://admin:admin@192.168.100.86:554/stream1 
+    rtspTransport: tcp
     sourceOnDemand: no
 
     # Stability tuning
