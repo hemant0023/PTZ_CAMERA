@@ -175,20 +175,14 @@ async function setStaticIP(ip, gateway) {
 // app.post('/api/network/apply', async (req, res) => {
 //   try {
 //     const networkConfig = req.body;
-    
 //     console.log('🔧 Applying network configuration:', networkConfig);
     
-//     const results = {
-//       success: true,
-//       applied: [],
-//       errors: []
-//     };
+//     const results = { success: true, applied: [], errors: [] };
     
 //     // Determine interface
 //     const iface = networkConfig.CONNECT_SYSTEM_NETWORK === 'WIFI' ? 'wlan0' : 'eth0';
-    
 //     // Apply based on mode
-//     if (networkConfig.SYSTEM_NETWORK_MODE === 'STATIC') {
+//     if (networkConfig.SYSTEM_NETWORK_MODE === 'STATIC'){
 //       try {
 //         // Remove existing IP
 //         try {
@@ -196,12 +190,8 @@ async function setStaticIP(ip, gateway) {
 //         } catch (e) {
 //           console.log('No existing IP to remove');
 //         }
-        
 //         // Add new static IP
-//         await network.addIP(
-//           iface,
-//           networkConfig.STATIC_IP_ADDRESS + '/24'
-//         );
+//         await network.addIP(iface,networkConfig.STATIC_IP_ADDRESS + '/24' );
 //         results.applied.push('Static IP configured');
         
 //         // Set gateway
@@ -210,25 +200,22 @@ async function setStaticIP(ip, gateway) {
 //         } catch (e) {
 //           console.log('No existing gateway');
 //         }
-        
+
 //         await network.addGateway(networkConfig.GATE_WAY);
 //         results.applied.push('Gateway configured');
         
-//       } catch (error) {
+//       }catch (error){
 //         results.errors.push('IP/Gateway config failed: ' + error);
 //       }
 //     }
     
 //     // Connect to WiFi if needed
-//     if (networkConfig.CONNECT_SYSTEM_NETWORK === 'WIFI' || 
-//         networkConfig.CONNECT_SYSTEM_NETWORK === 'ETHERNET & WIFI') {
+//     if (networkConfig.CONNECT_SYSTEM_NETWORK === 'WIFI' ||  networkConfig.CONNECT_SYSTEM_NETWORK === 'ETHERNET & WIFI'){
       
-//       if (networkConfig.WIFI_SSID && networkConfig.WIFI_PASSWORD) {
+//       if (networkConfig.WIFI_SSID && networkConfig.WIFI_PASSWORD){
 //         try {
 //           // Use nmcli to connect
-//           await execPromise(
-//             `nmcli device wifi connect "${networkConfig.WIFI_SSID}" password "${networkConfig.WIFI_PASSWORD}"`
-//           );
+//           await execPromise(`nmcli device wifi connect "${networkConfig.WIFI_SSID}" password "${networkConfig.WIFI_PASSWORD}"` );
 //           results.applied.push('WiFi connected');
 //         } catch (error) {
 //           results.errors.push('WiFi connection failed: ' + error.message);
@@ -261,30 +248,38 @@ async function setStaticIP(ip, gateway) {
 
  const os = require('os');
 const { AsyncResource } = require("async_hooks");
-  const interfaces = os.networkInterfaces();
+  //const interfaces = os.networkInterfaces();
 // Get current IP address
 async function getCurrentIPAddress() {
 
-  // Try wlan0 first, then eth0
-  for (const ifaceName of ['wlan0', 'eth0']) {
-    const iface = interfaces[ifaceName];
-    if (iface) {
-      for (const addr of iface) {
-        if (addr.family === 'IPv4' && !addr.internal) {
-          return addr.address;
-        }
-      }
+  const interfaces = os.networkInterfaces();
+  const order = ["eth0", "wlan0"];
+
+  for (const name of order) {
+    const iface = interfaces[name];
+    if (!iface) continue;
+
+    const ipv4 = iface.find(
+      addr => addr.family === "IPv4" && !addr.internal
+    );
+
+    if (ipv4) {
+      console.log(`ACTIVE NETWORK INTERFACE: ${name}`);
+      return ipv4.address;
     }
+
   }
-  
-  return '0.0.0.0';
+
+  console.log("NO ACTIVE NETWORK");
+
+  return "0.0.0.0";
 }
 
 // Get MAC address
 function getMACAddress(iface = 'wlan0') {
 
   // const os = require('os');
-  // const interfaces = os.networkInterfaces();
+  const interfaces = os.networkInterfaces();
   if(interfaces[iface]) {
     return interfaces[iface][0].mac;
   }
@@ -303,7 +298,88 @@ function getMACAddress(iface = 'wlan0') {
 //   res.json({ success: true, networks });
 // });
 
+async function enableWifi() {
+  try {
+    await execPromise("rfkill unblock wifi");
+  } catch {}
 
+  try {
+    await execPromise("nmcli radio wifi on");
+  } catch {}
+
+  try {
+    await execPromise("sudo ip link set wlan0 up");
+  } catch {}
+}
+
+async function wifiStatus() {
+
+  const { stdout } = await execPromise(
+    "nmcli -t -f ACTIVE,SSID dev wifi"
+  );
+
+  const active = stdout.split("\n").find(line => line.startsWith("yes"));
+  if (!active) {
+    return { connected:false };
+  }
+
+  return {
+    connected:true,
+    ssid: active.split(":")[1]
+  };
+}
+
+async function connectWifi(ssid, password) {
+
+  await enableWifi();
+
+  const status = await wifiStatus();
+
+  if (status.connected && status.ssid === ssid) {
+    console.log('WiFi Already connected');
+    return { message: "Already connected" };
+  }
+
+  try {
+    await execPromise(`sudo nmcli dev wifi connect "${ssid}" password "${password}" ifname wlan0`);
+    console.log('WiFi connected');
+    return { success:true };
+
+  } catch(err) {
+
+    if (err.includes("No network with SSID")) {
+      throw new Error("NETWORK_NOT_FOUND");
+    }
+
+    if (err.includes("Secrets were required")) {
+      throw new Error("INVALID_PASSWORD");
+    }
+
+    if (err.includes("Timeout")) {
+      throw new Error("CONNECTION_TIMEOUT");
+    }
+
+    throw new Error("WIFI_CONNECTION_FAILED");
+  }
+}
+
+async function disconnectWifi() {
+  try {
+    await execPromise("nmcli device disconnect wlan0");
+    return { success:true };
+  } catch {
+    return { success:false };
+  }
+}
+
+async function forgetWifi(ssid) {
+  try {
+    await execPromise(`nmcli connection delete "${ssid}"`);
+    return { success:true };
+  } catch {
+    return { success:false };
+  }
+}
 
 app.get('/api/network/wifi/scan', async (req, res) => {
   try {
@@ -325,18 +401,38 @@ app.get('/api/network/wifi/scan', async (req, res) => {
         // sudo systemctl restart NetworkManager
         // nmcli device  or nmcli device status  or nmcli dev wifi list --rescan yes (type of network list  DEVICE         TYPE      STATE      CONNECTION )
       // Try nmcli first (NetworkManager)   
-      //run  nmcli dev wifi list or nmcli device wifi list
+      //run  nmcli dev wifi list or nmcli device wifi list  //Check all network devices
        //  nmcli -t -f SSID,SIGNAL,SECURITY dev wifi list --rescan yes
      //  nmcli dev wifi connect "MyWifi" password "mypassword"  /Connect to WiFi
+     //nmcli connection up "OfficeWifi" //Reconnect to a Saved Network
+    //nmcli dev wifi connect "CafeWifi"  Connect to open network:
+
      // nmcli connection show // Show saved WiFi networks
+     //nmcli device disconnect wlan0 //Disconnect current connection:
      //   nmcli connection delete "HomeWifi" Forget a network
+    //nmcli connection show --active Check which network is active:
 // Option	Meaning
 // -t	terse output (script friendly)
 // -f	fields to show
 // SSID,SIGNAL,SECURITY	only show these columns 
 //ALL FIELD IN-USE  BSSID              SSID                     MODE   CHAN  RATE        SIGNAL  BARS  SECURITY 
+//rfkill unblock all
+//nmcli radio wifi on
+//ip addr show wlan0  //Check IP Address
+//Set Static IP with nmcli
+// nmcli connection modify "OfficeWifi" ipv4.method manual \  
+// ipv4.addresses 192.168.1.50/24 \
+// ipv4.gateway 192.168.1.1 \
+// ipv4.dns 8.8.8.8
+// nmcli connection up "OfficeWifi"
 
-        const { stdout } = await execPromise('nmcli -t -f SSID,SIGNAL,SECURITY device wifi list --rescan yes');
+// sudo nmcli radio wifi off
+// sudo ip link set wlan0 down
+// sudo ip link set wlan0 up
+// sudo nmcli radio wifi on
+// sudo systemctl restart NetworkManager
+        await enableWifi();
+        const { stdout } = await execPromise('nmcli -t -f SSID,SIGNAL,SECURITY device wifi list');
         console.log(' stdout nmcli  available = ',stdout);
 
       const lines = stdout.trim().split('\n');
@@ -396,23 +492,69 @@ app.get('/api/network/wifi/scan', async (req, res) => {
   }
 });
 
+ 
+async function SYSTEM_NETWORK_SETTING(){
+
+   console.log("CONNECT_SYSTEM_NETWORK : ",CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.CONNECT_SYSTEM_NETWORK);
+   network.addIP("eth0",`${CAMERA_CONFIGURATION.camera_network.GATE_WAY}/24`);
+   await setStaticIP(CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.STATIC_IP_ADDRESS,CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.GATE_WAY);
 
 
-// // Network Apply
-// app.post('/api/network/apply', async (req, res) => {
+   //     // Determine interface
+//           const iface = networkConfig.CONNECT_SYSTEM_NETWORK === 'WIFI' ? 'wlan0' : 'eth0';
+//     // Apply based on mode
+//     if (networkConfig.SYSTEM_NETWORK_MODE === 'STATIC'){
+//       try {
+//         // Remove existing IP
+//         try {
+//           await network.deleteIP(iface, networkConfig.STATIC_IP_ADDRESS + '/24');
+//         } catch (e) {
+//           console.log('No existing IP to remove');
+//         }
+//         // Add new static IP
+//         await network.addIP(iface,networkConfig.STATIC_IP_ADDRESS + '/24' );
+//         results.applied.push('Static IP configured');
+        
+//         // Set gateway
+//         try {
+//           await network.deleteGateway();
+//         } catch (e) {
+//           console.log('No existing gateway');
+//         }
 
-//   const config = req.body;
-//   if (config.SYSTEM_NETWORK_MODE === 'STATIC') {
-//     await network.addIP('wlan0', config.STATIC_IP_ADDRESS + '/24');
-//     await network.addGateway(config.GATE_WAY);
-//   }
-  
-//   if (config.WIFI_SSID) {
-//     await execPromise(`nmcli device wifi connect "${config.WIFI_SSID}" password "${config.WIFI_PASSWORD}"`);
-//   }
-  
-//   res.json({ success: true });
-// });
+//         await network.addGateway(networkConfig.GATE_WAY);
+//         results.applied.push('Gateway configured');
+        
+//       }catch (error){
+//         results.errors.push('IP/Gateway config failed: ' + error);
+//       }
+//     }
+
+   
+// network.addIP("eth0",`${CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.STATIC_IP_ADDRESS}/24`);
+
+      if (CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.CONNECT_SYSTEM_NETWORK === 'WIFI' ||  CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.CONNECT_SYSTEM_NETWORK === 'ETHERNET & WIFI'){
+     
+        if (CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.WIFI_SSID && CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.WIFI_PASSWORD){
+        await connectWifi(CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.WIFI_SSID , CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.WIFI_PASSWORD);
+        }
+
+    }else{
+
+       const status = await wifiStatus();
+      if (status.connected){
+          console.log('disconnectWifi WiFi Already connected');
+          await disconnectWifi();
+        }
+        
+         }
+
+ CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.DYNAMIC_IP_ADDRESS =  await getCurrentIPAddress();
+ console.log  (`SYSTEM STATIC_IP_ADDRESS: ${CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.STATIC_IP_ADDRESS}`);
+ console.log  (`SYSTEM DYNAMIC_IP_ADDRESS:${CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.DYNAMIC_IP_ADDRESS}`);
+
+
+} 
 
 
 let  ffmpegProcess = null;
@@ -847,21 +989,39 @@ app.post("/api/camera/config", (req, res) => {
     if (body.camera_network){
 
       updateObject(CAMERA_CONFIGURATION.camera_network,body.camera_network,CAMERA_ALLOWED.NETWORK);
+      
+      if (body.camera_network.GATE_WAY != CAMERA_CONFIGURATION.camera_network.GATE_WAY ) {
+           network.addIP("eth0",`${CAMERA_CONFIGURATION.camera_network.GATE_WAY}/24`); 
+           stopMediaMtx();
+           }
 
        CAMERA_CONFIGURATION.camera_network.rtspUrl     = `rtsp://${CAMERA_CONFIGURATION.camera_network.httpUser}:${CAMERA_CONFIGURATION.camera_network.httpPass}@${CAMERA_CONFIGURATION.camera_network.ip}:${CAMERA_CONFIGURATION.camera_network.rtspPort}${CAMERA_CONFIGURATION.camera_network.rtspPath}`;
        CAMERA_CONFIGURATION.camera_network.httpCgiBase = `http://${CAMERA_CONFIGURATION.camera_network.httpUser}:${CAMERA_CONFIGURATION.camera_network.httpPass}@${CAMERA_CONFIGURATION.camera_network.ip}`;
-       stopMediaMtx(); // START AUTOMATICALLY 
+       //stopMediaMtx(); // START AUTOMATICALLY 
       // setTimeout(startMediaMtx,3000);
     }
 
      
 
     if (body.SBC_SYSTEM_NETWORK) {
+
       updateObject(CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK,body.SBC_SYSTEM_NETWORK,CAMERA_ALLOWED.SYSTEM_NETWORK);
-      network.addIP("eth0",`${CAMERA_CONFIGURATION.camera_network.GATE_WAY}/24`);
-      setStaticIP(CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.STATIC_IP_ADDRESS,CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.GATE_WAY);
-    // network.addIP("eth0",`${CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.STATIC_IP_ADDRESS}/24`);
-    }
+       if (body.SBC_SYSTEM_NETWORK.STATIC_IP_ADDRESS != CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.STATIC_IP_ADDRESS  
+        || body.SBC_SYSTEM_NETWORK.GATE_WAY !=  CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.GATE_WAY
+         ) { setStaticIP(CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.STATIC_IP_ADDRESS,CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.GATE_WAY); }
+
+      if ( CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.CONNECT_SYSTEM_NETWORK === 'WIFI' ||  CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.CONNECT_SYSTEM_NETWORK === 'ETHERNET & WIFI' ){
+        if (body.SBC_SYSTEM_NETWORK.WIFI_SSID !=  CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.WIFI_SSID 
+        || body.SBC_SYSTEM_NETWORK.WIFI_PASSWORD  !=  CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.WIFI_PASSWORD 
+        ){
+       
+        if (CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.WIFI_SSID && CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.WIFI_PASSWORD){
+            connectWifi(CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.WIFI_SSID , CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.WIFI_PASSWORD);
+          }
+       }
+     }
+     
+      }
 
 
     /* ---------------- IMAGE SETTINGS ---------------- */
@@ -1471,7 +1631,7 @@ async function CHECK_CAMERA_ONLINE(){
     console.log("✅ Camera Online → Start MediaMTX");
     mediaMtxRunning = true;
     startMediaMtx(CAMERA_CONFIGURATION.CAMERA_MODE);
-
+    FIXED_ZOOM_POSITION(CAMERA_CONFIGURATION.ZOOM_IN_FIXED,7);
   }
 
   if (!CAMERA_CONFIGURATION.camera_network.CAMERA_ONLINE && mediaMtxRunning) {
@@ -3000,7 +3160,7 @@ function RUN_FFMPEG_ARGUMENT_COMMAND({ outputPath = null, enableLive = false }){
     return { success: FFMPEG_ERROR.result, errorId: FFMPEG_ERROR.INVALID_ARGUMENT, reason:FFMPEG_ERROR.reason }; 
     }else{
 
-      FIXED_ZOOM_POSITION(CAMERA_CONFIGURATION.ZOOM_IN_FIXED,7);
+      //FIXED_ZOOM_POSITION(CAMERA_CONFIGURATION.ZOOM_IN_FIXED,7);
     }
 
      args = [
@@ -3406,13 +3566,12 @@ if (validSegments.length === 0){
 }
 
 console.log("✅ Valid segments:", validSegments.length);
-      
       const segmentListFile = path.join(videosDir, `rec_video_segments_${Date.now()}.txt`);
      // fs.writeFileSync(segmentListFile, segments.map(f => `file '${f}'`).join("\n"));
       fs.writeFileSync(segmentListFile,validSegments.map(f => `file '${f}'`).join("\n"));
 
-      console.log("📄 Segment list created:", segmentListFile);
-      
+      console.log("📄 Segment list created:", segmentListFile);   
+
       const result = await new Promise((resolve, reject) => {
         
         const merge = spawn("ffmpeg", [
@@ -3426,6 +3585,7 @@ console.log("✅ Valid segments:", validSegments.length);
         ]);
         
         let stderrOutput = "";
+
         merge.stderr.on("data", data => {
           const msg = data.toString();
           stderrOutput += msg;
@@ -4379,27 +4539,20 @@ ensureHostname();
 cleanupPort(PORT);
 
 
-server.listen(PORT, async() => {
 
+
+
+
+server.listen(PORT, async() => {
+ console.log(`Camera server running on http://0.0.0.0:${PORT}`);
  loadCameraConfig();
  detectSdCardAsync();  
 
- //network.addIP("eth0", "192.168.100.1/24");
- 
- network.addIP("eth0",`${CAMERA_CONFIGURATION.camera_network.GATE_WAY}/24`);
- await setStaticIP(CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.STATIC_IP_ADDRESS,CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.GATE_WAY);
-
-// network.addIP("eth0",`${CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.STATIC_IP_ADDRESS}/24`);
-
- console.log  (`SYSTEM STATIC_IP_ADDRESS: ${CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.STATIC_IP_ADDRESS}`);
- CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.DYNAMIC_IP_ADDRESS =  await getCurrentIPAddress();
- console.log  (`SYSTEM DYNAMIC_IP_ADDRESS:${CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.DYNAMIC_IP_ADDRESS}`);
- 
- console.log(`Camera server running on http://0.0.0.0:${PORT}`);
+ network.addIP("eth0", "192.168.100.1/24");
+ await SYSTEM_NETWORK_SETTING();
  startMDNS();
  monitorMDNS();
  CHECK_CAMERA_ONLINE();
- 
 
   setInterval(() =>{
 
