@@ -7,7 +7,7 @@
   "bitrate": "4M",
   "EXTENSION": ".mp4",
   "ZOOM_IN_FIXED_FLAG": false,
-  "ZOOM_IN_FIXED": 100,
+  "ZOOM_IN_FIXED": 300,
   "ZOOM_OUT_FIXED": 5,
   "ZOOM_POS_FIXED": 100,
   "PTZ_POSITION_STEP": "0005",

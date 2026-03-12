@@ -30,7 +30,7 @@ async function addIP(iface, ipWithPrefix) {
     if (!validateIP(ipWithPrefix)) {
         throw "Invalid IP format";
     }
-
+    return await runCommand(`sudo ip addr replace ${ipWithPrefix} dev ${iface}`);
     return await runCommand(`sudo ip addr add ${ipWithPrefix} dev ${iface}`);
 }
 
@@ -38,8 +38,9 @@ async function deleteIP(iface, ipWithPrefix){
     return await runCommand(`sudo ip addr del ${ipWithPrefix} dev ${iface}`);
 }
 
-async function addGateway(gateway) {
-    return await runCommand(`sudo ip route add default via ${gateway}`);
+async function addGateway(iface,gateway,metric_value) {
+   // return await runCommand(`sudo ip route add default via ${gateway}`);
+   return await runCommand(`sudo ip route replace default via ${gateway} dev ${iface} metric ${metric_value}`);
 }
 
 async function deleteGateway(){

@@ -284,11 +284,19 @@ async function setStaticIP(iface , STATIC_IP_ADDRESS, gateway) {
     // Add IP
   await  network.addIP(iface ,`${STATIC_IP_ADDRESS}/24`);
    // await network.addIP('eth0', ip + '/24');
-    
+   let  matrix_value = 100;
+  
+   if(iface === "eth0" ){
+      matrix_value = 100;
+   }else if(iface === "wlan0"){
+     matrix_value =  200;
+   }
+
     // Set gateway
-    if(gateway && gateway != 0){
-    await runCommand("sudo ip route del default").catch(()=>{});
-    await network.addGateway(gateway);}
+    if(gateway){ 
+    //await runCommand("sudo ip route del default").catch(()=>{});
+    await network.addGateway(iface,gateway,matrix_value);
+  }
 
     network.addIP("eth0",`${CAMERA_CONFIGURATION.camera_network.GATE_WAY}/24`); 
     // Test connection
@@ -297,6 +305,7 @@ async function setStaticIP(iface , STATIC_IP_ADDRESS, gateway) {
     console.log('✅ Network configured successfully');
     return true;
   } catch (error) {
+
     console.error('❌ Network configuration failed:', error);
     return false;
   }
@@ -557,15 +566,15 @@ async function SYSTEM_NETWORK_SETTING(){
         if (CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.WIFI_SSID && CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.WIFI_PASSWORD){
               await connectWifi(CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.WIFI_SSID , CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.WIFI_PASSWORD);
               CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.MAC_Address =  getMACAddress("wlan0");
-              await new Promise(r => setTimeout(r,3000))
+              await new Promise(r => setTimeout(r,2000))
 
               if(CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.SYSTEM_NETWORK_MODE === 'STATIC'){
                 console.log("Static wifi_IP_ADDRESS:" );
-                  await runCommand("sudo dhclient -r wlan0").catch(()=>{});
+                  //await runCommand("sudo dhclient -r wlan0").catch(()=>{});
                   await runCommand("sudo ip addr flush dev wlan0");
                   await setStaticIP("wlan0",CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.STATIC_IP_ADDRESS,CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.GATE_WAY);
                  // await network.addIP("wlan0", CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.STATIC_IP_ADDRESS + "/24");
-                // await network.addGateway(CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.GATE_WAY);
+                // await network.addGateway("wlan0",CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.GATE_WAY,200);
                     CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.DYNAMIC_IP_ADDRESS = CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.STATIC_IP_ADDRESS;
             
                 }else if(CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.SYSTEM_NETWORK_MODE === "DHCP"){
@@ -710,12 +719,17 @@ let CAMERA_CONFIGURATION = {
   },
 
   SBC_SYSTEM_NETWORK: {
-  
-    CONNECT_SYSTEM_NETWORK : "WIFI", // ETHERNET or WIFI , ETHERNET&WIFI
+
+    SYSTEM_MAC_ADDRESS : "",
+    CONNECT_SYSTEM_NETWORK : "WIFI", // ETHERNET or WIFI , ETHERNET & WIFI
     SYSTEM_NETWORK_MODE: "DHCP",     // DHCP or STATIC
-    STATIC_IP_ADDRESS :  "192.168.29.15",   // ← your camera IP
+    STATIC_IP_ADDRESS :  "192.168.29.15",
+    STATIC_IP_ADDRESS_WIFI :  "",  
+    STATIC_IP_ADDRESS_ETHERNET:  "", // ← your camera IP
     DYNAMIC_IP_ADDRESS :  "",   // ← your camera IP
-    GATE_WAY:     "192.168.29.2",
+    DYNAMIC_IP_ADDRESS_WIFI : "",
+    DYNAMIC_IP_ADDRESS_ETHERNET: "",
+    GATE_WAY:     "192.168.29.1",
     SUBNET_MASK :  "255.255.255.0",
     MAC_Address : "D4:E0:8E:99:3E:DF",
     DNS_Address:  "8.8.8.8",
@@ -1056,28 +1070,39 @@ app.post("/api/camera/config", (req, res) => {
 
     /* ---------------- NETWORK UPDATE ---------------- */
 
-    if (body.camera_network){
+       if(body.camera_network){
 
-      if (body.camera_network.GATE_WAY != CAMERA_CONFIGURATION.camera_network.GATE_WAY || body.camera_network.ip != CAMERA_CONFIGURATION.camera_network.ip ){
-           network.addIP("eth0",`${CAMERA_CONFIGURATION.camera_network.GATE_WAY}/24`); 
-           stopMediaMtx();
-        }
-
-       CAMERA_CONFIGURATION.camera_network.rtspUrl     = `rtsp://${CAMERA_CONFIGURATION.camera_network.httpUser}:${CAMERA_CONFIGURATION.camera_network.httpPass}@${CAMERA_CONFIGURATION.camera_network.ip}:${CAMERA_CONFIGURATION.camera_network.rtspPort}${CAMERA_CONFIGURATION.camera_network.rtspPath}`;
-       CAMERA_CONFIGURATION.camera_network.httpCgiBase = `http://${CAMERA_CONFIGURATION.camera_network.httpUser}:${CAMERA_CONFIGURATION.camera_network.httpPass}@${CAMERA_CONFIGURATION.camera_network.ip}`;
+          //updateObject(CAMERA_CONFIGURATION.camera_network,body.camera_network,CAMERA_ALLOWED.NETWORK);
+          network.addIP("eth0",`${body.camera_network.GATE_WAY}/24`); 
+          CAMERA_CONFIGURATION.camera_network.rtspUrl     = `rtsp://${CAMERA_CONFIGURATION.camera_network.httpUser}:${CAMERA_CONFIGURATION.camera_network.httpPass}@${CAMERA_CONFIGURATION.camera_network.ip}:${CAMERA_CONFIGURATION.camera_network.rtspPort}${CAMERA_CONFIGURATION.camera_network.rtspPath}`;
+          CAMERA_CONFIGURATION.camera_network.httpCgiBase = `http://${CAMERA_CONFIGURATION.camera_network.httpUser}:${CAMERA_CONFIGURATION.camera_network.httpPass}@${CAMERA_CONFIGURATION.camera_network.ip}`;
+          stopMediaMtx();
       
+      //  if (
+      //       body.camera_network.httpUser != CAMERA_CONFIGURATION.camera_network.httpUser 
+      //   ||  body.camera_network.httpPass != CAMERA_CONFIGURATION.camera_network.httpPass
+      //   ||  body.camera_network.ip       != CAMERA_CONFIGURATION.camera_network.ip
+      //   ||  body.camera_network.rtspPort != CAMERA_CONFIGURATION.camera_network.rtspPort
+      //   ||  body.camera_network.rtspPath != CAMERA_CONFIGURATION.camera_network.rtspPath
+      //   || body.camera_network.GATE_WAY  != CAMERA_CONFIGURATION.camera_network.GATE_WAY 
+      
+      //   ){    
+        
+      //   network.addIP("eth0",`${body.camera_network.GATE_WAY}/24`); 
+      //   CAMERA_CONFIGURATION.camera_network.rtspUrl     = `rtsp://${body.camera_network.httpUser}:${body.camera_network.httpPass}@${body.camera_network.ip}:${body.camera_network.rtspPort}${body.camera_network.rtspPath}`;
+      //   CAMERA_CONFIGURATION.camera_network.httpCgiBase = `http://${body.camera_network.httpUser}:${body.camera_network.httpPass}@${body.camera_network.ip}`;
+      //   stopMediaMtx();
+      //   }
+
+      //  updateObject(CAMERA_CONFIGURATION.camera_network,body.camera_network,CAMERA_ALLOWED.NETWORK);
+
        //stopMediaMtx(); // START AUTOMATICALLY 
       // setTimeout(startMediaMtx,3000);
-    updateObject(CAMERA_CONFIGURATION.camera_network,body.camera_network,CAMERA_ALLOWED.NETWORK);
-    
     }
 
-     
 
-    if (body.SBC_SYSTEM_NETWORK) {
-       
-    
-       
+     if(body.SBC_SYSTEM_NETWORK) {
+      
       if ( body.SBC_SYSTEM_NETWORK.STATIC_IP_ADDRESS != CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.STATIC_IP_ADDRESS  
         || body.SBC_SYSTEM_NETWORK.GATE_WAY !=         CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.GATE_WAY
         || body.SBC_SYSTEM_NETWORK.WIFI_SSID !=          CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.WIFI_SSID 
@@ -1086,22 +1111,26 @@ app.post("/api/camera/config", (req, res) => {
         || body.SBC_SYSTEM_NETWORK.CONNECT_SYSTEM_NETWORK  !=CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.CONNECT_SYSTEM_NETWORK
         || body.SBC_SYSTEM_NETWORK.SYSTEM_NETWORK_MODE  !=  CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.SYSTEM_NETWORK_MODE
         ) {
+            updateObject(CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK,body.SBC_SYSTEM_NETWORK,CAMERA_ALLOWED.SYSTEM_NETWORK);
             SYSTEM_NETWORK_SETTING();
          }
 
-       updateObject(CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK,body.SBC_SYSTEM_NETWORK,CAMERA_ALLOWED.SYSTEM_NETWORK);
-      }
+            updateObject(CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK,body.SBC_SYSTEM_NETWORK,CAMERA_ALLOWED.SYSTEM_NETWORK);
+     
+     }
 
 
     /* ---------------- IMAGE SETTINGS ---------------- */
 
-    if (body.IMAGE_SETTINGS) {updateObject(CAMERA_CONFIGURATION.IMAGE_SETTINGS,body.IMAGE_SETTINGS,CAMERA_ALLOWED.IMAGE);
+    if (body.IMAGE_SETTINGS) {
+      updateObject(CAMERA_CONFIGURATION.IMAGE_SETTINGS,body.IMAGE_SETTINGS,CAMERA_ALLOWED.IMAGE);
     }
 
 
     /* ---------------- PTZ SETTINGS ---------------- */
 
-    if (body.PTZ_STATE) {updateObject(CAMERA_CONFIGURATION.PTZ_STATE,body.PTZ_STATE,CAMERA_ALLOWED.PTZ);
+    if (body.PTZ_STATE) {updateObject(
+      CAMERA_CONFIGURATION.PTZ_STATE,body.PTZ_STATE,CAMERA_ALLOWED.PTZ);
     }
 
 
@@ -1238,6 +1267,7 @@ CAMERA_CONFIGURATION.camera_network.rtspUrl     = `rtsp://${CAMERA_CONFIGURATION
 CAMERA_CONFIGURATION.camera_network.httpCgiBase = `http://${CAMERA_CONFIGURATION.camera_network.httpUser}:${CAMERA_CONFIGURATION.camera_network.httpPass}@${CAMERA_CONFIGURATION.camera_network.ip}`;
 
 const CONFIG_FILE = path.join(__dirname, "camera_config.json");
+
 function saveCameraConfig() {
 
   const tempFile = CONFIG_FILE + ".tmp";
@@ -3869,7 +3899,7 @@ app.post("/stop", async (req, res) => {
 });
 
 
-app.post("/reset", async (req, res) => {
+app.get("/reset", async (req, res) => {
 
   console.log("\n🗑️ reset REQUEST RECIEVE...");
    
@@ -3893,7 +3923,7 @@ app.post("/reset", async (req, res) => {
 
     if( segmentListFile && fs.existsSync(segmentListFile)){
        console.log("🗑 Deleted segmentListFile:", segmentListFile);
-      fs.unlinkSync(segmentListFile); }
+       fs.unlinkSync(segmentListFile); }
 
           RESET_DAUFALT_CAMERA_STATE();
    
@@ -3902,7 +3932,8 @@ app.post("/reset", async (req, res) => {
       RECORDING_STATE: CAMERA_STATE_STATUS()
     });
 
-} catch (err) {  
+} catch (err){  
+
         console.log("\n🗑️ reset REQUEST RECIEVE AND FAILED...");
         res.status(500).json({error: "RESET_FAILED",type: err.type || "UNKNOWN",message: err.message,details: err.stderr ? "Check server logs for FFmpeg output" : undefined});
           }   

@@ -161,9 +161,7 @@ video.autoplay = true;
 video.muted = true;    // required by Chrome 
 video.playsInline = true; //Disable fullscreen hijack  
 video.disablePictureInPicture = true;
-//video.controls = false;  // Hides native play/pause UI Prevents user from scrubbing timeline
-
-
+video.controls = true;  // Hides native play/pause UI Prevents user from scrubbing timeline
 
       document.addEventListener("volume_button_click", () => {
       video.muted = false;  //Can I unmute later
