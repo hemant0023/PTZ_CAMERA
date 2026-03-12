@@ -78,7 +78,7 @@
 
     /* Page */
     .page {
-      max-width: 1400px;
+      max-width: 1600px;
       margin: 24px auto;
       padding: 0 24px;
     }
@@ -132,10 +132,11 @@
       background: var(--bg-secondary);
       padding: 8px 8px 0;
       border-radius: 8px 8px 0 0;
+      overflow-x: auto;
     }
 
     .tab {
-      padding: 12px 24px;
+      padding: 12px 20px;
       background: transparent;
       border: none;
       color: var(--text-secondary);
@@ -143,7 +144,8 @@
       cursor: pointer;
       border-bottom: 3px solid transparent;
       transition: all 0.2s;
-      font-size: 14px;
+      font-size: 13px;
+      white-space: nowrap;
     }
 
     .tab:hover {
@@ -236,6 +238,11 @@
       box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
     }
 
+    .form-control:disabled {
+      background: var(--bg-tertiary);
+      cursor: not-allowed;
+    }
+
     select.form-control {
       appearance: none;
       background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12'%3E%3Cpath fill='%230f172a' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
@@ -292,6 +299,7 @@
     .radio-group {
       display: flex;
       gap: 16px;
+      flex-wrap: wrap;
     }
 
     .radio-item {
@@ -304,6 +312,14 @@
       width: 18px;
       height: 18px;
       accent-color: var(--primary);
+    }
+
+    /* Checkbox */
+    input[type="checkbox"] {
+      width: 18px;
+      height: 18px;
+      accent-color: var(--primary);
+      cursor: pointer;
     }
 
     /* Buttons */
@@ -336,10 +352,22 @@
       color: white;
     }
 
+    .btn-sm {
+      padding: 6px 12px;
+      font-size: 12px;
+    }
+
     .btn-group {
       display: flex;
       gap: 12px;
       margin-top: 24px;
+    }
+
+    .btn-inline {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 8px;
     }
 
     /* Status Message */
@@ -391,6 +419,130 @@
       font-family: monospace;
     }
 
+    /* WiFi List */
+    .wifi-list {
+      max-height: 200px;
+      overflow-y: auto;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      margin-top: 8px;
+    }
+
+    .wifi-item {
+      padding: 12px;
+      border-bottom: 1px solid var(--border);
+      cursor: pointer;
+      transition: background 0.2s;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .wifi-item:hover {
+      background: var(--bg-tertiary);
+    }
+
+    .wifi-item:last-child {
+      border-bottom: none;
+    }
+
+    .wifi-item.selected {
+      background: rgba(37, 99, 235, 0.1);
+      border-left: 3px solid var(--primary);
+    }
+
+    .wifi-signal {
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+
+    /* Live Preview */
+    .preview-container {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      width: 400px;
+      background: var(--bg-secondary);
+      border: 2px solid var(--border);
+      border-radius: 12px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+      z-index: 1000;
+      overflow: hidden;
+    }
+
+    .preview-container.minimized {
+      width: 200px;
+    }
+
+    .preview-container.hidden {
+      transform: translateX(450px);
+    }
+
+    .preview-header {
+      background: var(--primary);
+      color: white;
+      padding: 12px 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      cursor: move;
+    }
+
+    .preview-title {
+      font-weight: 700;
+      font-size: 13px;
+      letter-spacing: 0.5px;
+    }
+
+    .preview-controls {
+      display: flex;
+      gap: 8px;
+    }
+
+    .preview-btn {
+      width: 24px;
+      height: 24px;
+      background: rgba(255,255,255,0.2);
+      border: 1px solid rgba(255,255,255,0.3);
+      border-radius: 4px;
+      color: white;
+      font-size: 12px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s;
+    }
+
+    .preview-btn:hover {
+      background: rgba(255,255,255,0.3);
+    }
+
+    .preview-video {
+      width: 100%;
+      height: 225px;
+      background: #000;
+      object-fit: cover;
+    }
+
+    .preview-container.minimized .preview-video {
+      height: 112px;
+    }
+
+    .preview-status {
+      padding: 8px 16px;
+      background: var(--bg-tertiary);
+      font-size: 11px;
+      display: flex;
+      justify-content: space-between;
+      color: var(--text-secondary);
+    }
+
+    .preview-quality {
+      color: var(--primary);
+      font-weight: 600;
+    }
+
     .hidden {
       display: none;
     }
@@ -399,6 +551,10 @@
     @media (max-width: 1024px) {
       .config-grid {
         grid-template-columns: 1fr;
+      }
+
+      .preview-container {
+        width: 320px;
       }
     }
 
@@ -414,6 +570,12 @@
       .btn-group {
         flex-direction: column;
       }
+
+      .preview-container {
+        width: 280px;
+        bottom: 10px;
+        right: 10px;
+      }
     }
   </style>
 </head>
@@ -424,8 +586,8 @@
     <div class="logo">📷 PTZ Camera System</div>
     <div class="nav-links">
       <a href="index.html" class="nav-a">🎥 Live View</a>
-      <a href="config2.html" class="nav-a active">⚡ Configuration</a>
-      <a href="records2.html" class="nav-a">📁 Records</a>
+      <a href="config.html" class="nav-a active">⚡ Configuration</a>
+      <a href="records.html" class="nav-a">📁 Records</a>
     </div>
   </nav>
 
@@ -434,7 +596,7 @@
     
     <!-- Header -->
     <div class="page-header">
-      <h1>⚙️CONFIGURATION</h1>
+      <h1>⚙️ Configuration</h1>
       <div class="connection-badge" id="cameraStatus">
         <span class="status-dot"></span>
         <span>Checking...</span>
@@ -448,7 +610,8 @@
       <button class="tab" onclick="switchTab('image')">🎨 Image</button>
       <button class="tab" onclick="switchTab('ptz')">🎯 PTZ</button>
       <button class="tab" onclick="switchTab('zoom')">🔍 Zoom</button>
-      <button class="tab" onclick="switchTab('network')">🌐 Network</button>
+      <button class="tab" onclick="switchTab('camera-network')">📡 Camera Network</button>
+      <button class="tab" onclick="switchTab('sbc-network')">🌐 SBC Network</button>
     </div>
 
     <!-- Tab: General -->
@@ -485,7 +648,7 @@
           <div id="rtspSettings">
             <div class="form-group">
               <label class="form-label">Camera IP Address</label>
-              <input type="text" class="form-control" id="cameraIP" placeholder="192.168.29.54">
+              <input type="text" class="form-control" id="cameraIP" placeholder="192.168.100.86">
             </div>
 
             <div class="form-row">
@@ -511,7 +674,7 @@
               </div>
               <div class="form-group">
                 <label class="form-label">Password</label>
-                <input type="password" class="form-control" id="httpPass" placeholder="password">
+                <input type="password" class="form-control" id="httpPass" placeholder="admin">
               </div>
             </div>
           </div>
@@ -559,9 +722,9 @@
           <div class="form-group">
             <label class="form-label">Video Format</label>
             <select class="form-control" id="format">
-              <option value="H264">H.264 (Recommended)</option>
-              <option value="MJPEG">MJPEG</option>
-              <option value="YUYV">YUYV</option>
+              <option value="h264">H.264 (Recommended)</option>
+              <option value="mjpeg">MJPEG</option>
+              <option value="yuyv">YUYV</option>
             </select>
           </div>
 
@@ -695,74 +858,224 @@
             <span class="card-title">Fixed Zoom Configuration</span>
           </div>
 
+          <div class="form-group">
+            <label class="form-label" style="display: flex; align-items: center; gap: 8px;">
+              <input type="checkbox" id="zoomInFixedFlag">
+              Enable Fixed Zoom
+            </label>
+          </div>
+
           <div class="form-row">
             <div class="form-group">
-              <label class="form-label">Zoom In Step</label>
-              <input type="number" class="form-control" id="zoomInFixed" min="1" max="20" value="5">
+              <label class="form-label">Zoom In Fixed</label>
+              <input type="number" class="form-control" id="zoomInFixed" min="1" max="200" value="100">
             </div>
             <div class="form-group">
-              <label class="form-label">Zoom Out Step</label>
-              <input type="number" class="form-control" id="zoomOutFixed" min="1" max="20" value="5">
+              <label class="form-label">Zoom Out Fixed</label>
+              <input type="number" class="form-control" id="zoomOutFixed" min="1" max="200" value="5">
             </div>
           </div>
 
           <div class="form-group">
-            <label class="form-label">Position Step (Hex)</label>
-            <input type="text" class="form-control" id="ptzPositionStep" value="0005" pattern="[0-9A-Fa-f]{4}">
+            <label class="form-label">Zoom Position Fixed</label>
+            <input type="number" class="form-control" id="zoomPosFixed" min="1" max="200" value="100">
           </div>
 
           <div class="form-group">
-            <label class="form-label">Info</label>
-            <p style="color: var(--text-secondary); font-size: 13px;">
-              Fixed zoom steps are used when clicking zoom in/out buttons. Position step is used for PTZ absolute positioning (hex value, 4 digits).
-            </p>
+            <label class="form-label">PTZ Position Step (Hex)</label>
+            <input type="text" class="form-control" id="ptzPositionStep" value="0005" pattern="[0-9A-Fa-f]{4}" maxlength="4">
           </div>
         </div>
 
       </div>
     </div>
 
-    <!-- Tab: Network -->
-    <div id="tab-network" class="tab-content">
+    <!-- Tab: Camera Network -->
+    <div id="tab-camera-network" class="tab-content">
       <div class="config-grid">
         
         <div class="card">
           <div class="card-header">
-            <span class="card-icon">🌐</span>
-            <span class="card-title">Network Configuration</span>
-          </div>
-
-          <div class="form-group">
-            <label class="form-label">Subnet Mask</label>
-            <input type="text" class="form-control" id="subnetMask" placeholder="255.255.255.0">
+            <span class="card-icon">📡</span>
+            <span class="card-title">Camera Network Settings</span>
           </div>
 
           <div class="form-row">
             <div class="form-group">
-              <label class="form-label">Gateway</label>
-              <input type="text" class="form-control" id="gateway" placeholder="192.168.100.1">
+              <label class="form-label">Subnet Mask</label>
+              <input type="text" class="form-control" id="cam_subnetMask" placeholder="255.255.255.0">
             </div>
             <div class="form-group">
-              <label class="form-label">DNS Server</label>
-              <input type="text" class="form-control" id="dns" placeholder="8.8.8.8">
+              <label class="form-label">Gateway</label>
+              <input type="text" class="form-control" id="cam_gateway" placeholder="192.168.100.1">
             </div>
           </div>
 
-          <div class="form-group">
-            <label class="form-label">MAC Address</label>
-            <input type="text" class="form-control" id="macAddress" readonly>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">DNS Address</label>
+              <input type="text" class="form-control" id="cam_dns" placeholder="8.8.8.8">
+            </div>
+            <div class="form-group">
+              <label class="form-label">MAC Address</label>
+              <input type="text" class="form-control" id="cam_macAddress" readonly>
+            </div>
           </div>
 
           <div class="form-row">
             <div class="form-group">
               <label class="form-label">TCP Port</label>
-              <input type="number" class="form-control" id="tcpPort" value="5678">
+              <input type="number" class="form-control" id="cam_tcpPort" value="5678">
             </div>
             <div class="form-group">
               <label class="form-label">UDP Port</label>
-              <input type="number" class="form-control" id="udpPort" value="1259">
+              <input type="number" class="form-control" id="cam_udpPort" value="1259">
             </div>
           </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Tab: SBC Network -->
+    <div id="tab-sbc-network" class="tab-content">
+      <div class="config-grid">
+        
+        <div class="card">
+          <div class="card-header">
+            <span class="card-icon">🌐</span>
+            <span class="card-title">SBC System Network</span>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Connection Type</label>
+            <div class="radio-group">
+              <label class="radio-item">
+                <input type="radio" name="sbcNetworkType" value="WIFI" checked>
+                <span>WiFi</span>
+              </label>
+              <label class="radio-item">
+                <input type="radio" name="sbcNetworkType" value="ETHERNET">
+                <span>Ethernet</span>
+              </label>
+              <label class="radio-item">
+                <input type="radio" name="sbcNetworkType" value="ETHERNET & WIFI">
+                <span>Both</span>
+              </label>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Subnet Mask</label>
+              <input type="text" class="form-control" id="sbc_subnetMask" placeholder="255.255.255.0">
+            </div>
+            <div class="form-group">
+              <label class="form-label">System MAC Address</label>
+              <input type="text" class="form-control" id="sbc_systemMacAddress" readonly>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Gateway</label>
+              <input type="text" class="form-control" id="sbc_gateway" placeholder="192.168.29.1">
+            </div>
+            <div class="form-group">
+              <label class="form-label">DNS Address</label>
+              <input type="text" class="form-control" id="sbc_dns" placeholder="8.8.8.8">
+            </div>
+          </div>
+
+          <!-- WiFi Settings -->
+          <div id="wifiSettingsSection">
+            <div class="card-header" style="margin-top: 20px;">
+              <span class="card-icon">📶</span>
+              <span class="card-title">WiFi Configuration</span>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Network Mode (WiFi)</label>
+              <div class="radio-group">
+                <label class="radio-item">
+                  <input type="radio" name="wifiNetworkMode" value="DHCP" checked>
+                  <span>DHCP (Automatic)</span>
+                </label>
+                <label class="radio-item">
+                  <input type="radio" name="wifiNetworkMode" value="STATIC">
+                  <span>Static IP</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">Static IP Address (WiFi)</label>
+                <input type="text" class="form-control" id="sbc_staticIP_wifi" placeholder="192.168.29.15">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Dynamic IP Address (WiFi)</label>
+                <input type="text" class="form-control" id="sbc_dynamicIP_wifi" placeholder="Auto-assigned" readonly>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">WiFi SSID</label>
+              <input type="text" class="form-control" id="sbc_wifiSSID" placeholder="hemant">
+              <button class="btn btn-primary btn-sm btn-inline" id="scanWifiBtn">📡 Scan Networks</button>
+            </div>
+
+            <div class="form-group" id="wifiListContainer" style="display: none;">
+              <label class="form-label">Available Networks</label>
+              <div class="wifi-list" id="wifiList">
+                <!-- WiFi networks will be populated here -->
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">WiFi Password</label>
+              <input type="password" class="form-control" id="sbc_wifiPassword" placeholder="Enter password">
+            </div>
+          </div>
+
+          <!-- Ethernet Settings -->
+          <div id="ethernetSettingsSection">
+            <div class="card-header" style="margin-top: 20px;">
+              <span class="card-icon">🔌</span>
+              <span class="card-title">Ethernet Configuration</span>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Network Mode (Ethernet)</label>
+              <div class="radio-group">
+                <label class="radio-item">
+                  <input type="radio" name="ethernetNetworkMode" value="DHCP" checked>
+                  <span>DHCP (Automatic)</span>
+                </label>
+                <label class="radio-item">
+                  <input type="radio" name="ethernetNetworkMode" value="STATIC">
+                  <span>Static IP</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">Static IP Address (Ethernet)</label>
+                <input type="text" class="form-control" id="sbc_staticIP_ethernet" placeholder="192.168.29.20">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Dynamic IP Address (Ethernet)</label>
+                <input type="text" class="form-control" id="sbc_dynamicIP_ethernet" placeholder="Auto-assigned" readonly>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">MAC Address (Ethernet)</label>
+              <input type="text" class="form-control" id="sbc_macAddress_ethernet" readonly>
+            </div>
+          </div>
+
         </div>
 
       </div>
@@ -770,6 +1083,7 @@
 
     <!-- Action Buttons -->
     <div class="btn-group">
+      <button class="btn btn-success" id="togglePreviewBtn">👁️ Toggle Preview</button>
       <button class="btn btn-primary" id="saveConfigBtn">💾 Save Configuration</button>
       <button class="btn btn-danger" id="resetBtn">↺ Reset to Defaults</button>
     </div>
@@ -779,7 +1093,23 @@
 
   </div>
 
-  <script src="js/config.js"></script>
+  <!-- Live Preview (Bottom Right) -->
+  <div class="preview-container" id="previewContainer">
+    <div class="preview-header">
+      <span class="preview-title">📡 LIVE PREVIEW</span>
+      <div class="preview-controls">
+        <button class="preview-btn" id="minimizePreview" title="Minimize">−</button>
+        <button class="preview-btn" id="closePreview" title="Close">×</button>
+      </div>
+    </div>
+    <video class="preview-video" id="previewVideo" autoplay muted playsinline></video>
+    <div class="preview-status">
+      <span><span class="status-dot"></span> <span id="previewStatus">Ready</span></span>
+      <span class="preview-quality" id="previewQuality">--</span>
+    </div>
+  </div>
+
+  <script src="js/config-final.js"></script>
 
 </body>
 </html>

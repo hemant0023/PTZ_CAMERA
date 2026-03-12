@@ -34,7 +34,7 @@
     "mirror": 0
   },
   "camera_network": {
-    "CAMERA_ONLINE": false,
+    "CAMERA_ONLINE": true,
     "ip": "192.168.100.86",
     "SUBNET_MASK": "255.255.255.0",
     "GATE_WAY": "192.168.100.1",

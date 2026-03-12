@@ -276,7 +276,8 @@ async function setDynamicIP(iface){
 
 // Example: Set static IP
 async function setStaticIP(iface , STATIC_IP_ADDRESS, gateway) {
-  try {
+
+  //try {
 
     await runCommand(`sudo dhclient -r ${iface}`).catch(()=>{});
    // await runCommand(`sudo ip addr flush dev ${iface}`);
@@ -304,11 +305,11 @@ async function setStaticIP(iface , STATIC_IP_ADDRESS, gateway) {
     
     console.log('✅ Network configured successfully');
     return true;
-  } catch (error) {
+  // } catch (error) {
 
-    console.error('❌ Network configuration failed:', error);
-    return false;
-  }
+  //   console.error('❌ Network configuration failed:', error);
+  //   return false;
+  // }
 }
 
 //     // Test connectivity
@@ -558,7 +559,7 @@ async function SYSTEM_NETWORK_SETTING(){
 
                      DYNAMIC_IP_ADDRESS =  await getCurrentIPAddress();
                      CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.DYNAMIC_IP_ADDRESS = DYNAMIC_IP_ADDRESS.ethernet;
-   
+                     console.log("SYSTEM ethernet ip :",  CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.DYNAMIC_IP_ADDRESS );
    }
 
       if (CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.CONNECT_SYSTEM_NETWORK === 'WIFI' ||  CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.CONNECT_SYSTEM_NETWORK === 'ETHERNET & WIFI'){
@@ -994,10 +995,12 @@ const CAMERA_ALLOWED = {
     "EXTENSION"
   ],
 
-  NETWORK: Object.keys(CAMERA_CONFIGURATION.camera_network),
+ // NETWORK: Object.keys(CAMERA_CONFIGURATION.camera_network), 
+NETWORK: Object.keys(CAMERA_CONFIGURATION.camera_network).filter(
+  k => !["rtspUrl", "httpCgiBase", "CAMERA_BASE_URL"].includes(k)
+),
   SYSTEM_NETWORK: Object.keys(CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK),
   IMAGE: Object.keys(CAMERA_CONFIGURATION.IMAGE_SETTINGS),
-
   PTZ: Object.keys(CAMERA_CONFIGURATION.PTZ_STATE)
 };
 
@@ -1073,35 +1076,34 @@ app.post("/api/camera/config", (req, res) => {
        if(body.camera_network){
 
           //updateObject(CAMERA_CONFIGURATION.camera_network,body.camera_network,CAMERA_ALLOWED.NETWORK);
-          network.addIP("eth0",`${body.camera_network.GATE_WAY}/24`); 
-          CAMERA_CONFIGURATION.camera_network.rtspUrl     = `rtsp://${CAMERA_CONFIGURATION.camera_network.httpUser}:${CAMERA_CONFIGURATION.camera_network.httpPass}@${CAMERA_CONFIGURATION.camera_network.ip}:${CAMERA_CONFIGURATION.camera_network.rtspPort}${CAMERA_CONFIGURATION.camera_network.rtspPath}`;
-          CAMERA_CONFIGURATION.camera_network.httpCgiBase = `http://${CAMERA_CONFIGURATION.camera_network.httpUser}:${CAMERA_CONFIGURATION.camera_network.httpPass}@${CAMERA_CONFIGURATION.camera_network.ip}`;
-          stopMediaMtx();
+          // network.addIP("eth0",`${body.camera_network.GATE_WAY}/24`); 
+          // CAMERA_CONFIGURATION.camera_network.rtspUrl     = `rtsp://${CAMERA_CONFIGURATION.camera_network.httpUser}:${CAMERA_CONFIGURATION.camera_network.httpPass}@${CAMERA_CONFIGURATION.camera_network.ip}:${CAMERA_CONFIGURATION.camera_network.rtspPort}${CAMERA_CONFIGURATION.camera_network.rtspPath}`;
+          // CAMERA_CONFIGURATION.camera_network.httpCgiBase = `http://${CAMERA_CONFIGURATION.camera_network.httpUser}:${CAMERA_CONFIGURATION.camera_network.httpPass}@${CAMERA_CONFIGURATION.camera_network.ip}`;
+          // stopMediaMtx();
       
-      //  if (
-      //       body.camera_network.httpUser != CAMERA_CONFIGURATION.camera_network.httpUser 
-      //   ||  body.camera_network.httpPass != CAMERA_CONFIGURATION.camera_network.httpPass
-      //   ||  body.camera_network.ip       != CAMERA_CONFIGURATION.camera_network.ip
-      //   ||  body.camera_network.rtspPort != CAMERA_CONFIGURATION.camera_network.rtspPort
-      //   ||  body.camera_network.rtspPath != CAMERA_CONFIGURATION.camera_network.rtspPath
-      //   || body.camera_network.GATE_WAY  != CAMERA_CONFIGURATION.camera_network.GATE_WAY 
+       if (
+            body.camera_network.httpUser != CAMERA_CONFIGURATION.camera_network.httpUser 
+        ||  body.camera_network.httpPass != CAMERA_CONFIGURATION.camera_network.httpPass
+        ||  body.camera_network.ip       != CAMERA_CONFIGURATION.camera_network.ip
+        ||  body.camera_network.rtspPort != CAMERA_CONFIGURATION.camera_network.rtspPort
+        ||  body.camera_network.rtspPath != CAMERA_CONFIGURATION.camera_network.rtspPath
+        || body.camera_network.GATE_WAY  != CAMERA_CONFIGURATION.camera_network.GATE_WAY 
       
-      //   ){    
+        ){    
         
-      //   network.addIP("eth0",`${body.camera_network.GATE_WAY}/24`); 
-      //   CAMERA_CONFIGURATION.camera_network.rtspUrl     = `rtsp://${body.camera_network.httpUser}:${body.camera_network.httpPass}@${body.camera_network.ip}:${body.camera_network.rtspPort}${body.camera_network.rtspPath}`;
-      //   CAMERA_CONFIGURATION.camera_network.httpCgiBase = `http://${body.camera_network.httpUser}:${body.camera_network.httpPass}@${body.camera_network.ip}`;
-      //   stopMediaMtx();
-      //   }
+        network.addIP("eth0",`${body.camera_network.GATE_WAY}/24`); 
+        console.log("✅ UPDATED CAMERA_CONFIGURATION.camera_network.rtspUrl 1", CAMERA_CONFIGURATION.camera_network.rtspUrl );
+        CAMERA_CONFIGURATION.camera_network.rtspUrl     = `rtsp://${body.camera_network.httpUser}:${body.camera_network.httpPass}@${body.camera_network.ip}:${body.camera_network.rtspPort}${body.camera_network.rtspPath}`;
+        CAMERA_CONFIGURATION.camera_network.httpCgiBase = `http://${body.camera_network.httpUser}:${body.camera_network.httpPass}@${body.camera_network.ip}`;
+         console.log("✅ UPDATED CAMERA_CONFIGURATION.camera_network.rtspUrl2 ", CAMERA_CONFIGURATION.camera_network.rtspUrl );
+        stopMediaMtx();
+        }
 
-      //  updateObject(CAMERA_CONFIGURATION.camera_network,body.camera_network,CAMERA_ALLOWED.NETWORK);
+      // updateObject(CAMERA_CONFIGURATION.camera_network,body.camera_network,CAMERA_ALLOWED.NETWORK);
 
-       //stopMediaMtx(); // START AUTOMATICALLY 
-      // setTimeout(startMediaMtx,3000);
     }
 
-
-     if(body.SBC_SYSTEM_NETWORK) {
+     if(body.SBC_SYSTEM_NETWORK){
       
       if ( body.SBC_SYSTEM_NETWORK.STATIC_IP_ADDRESS != CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.STATIC_IP_ADDRESS  
         || body.SBC_SYSTEM_NETWORK.GATE_WAY !=         CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.GATE_WAY
@@ -1159,110 +1161,6 @@ app.post("/api/camera/config", (req, res) => {
 });
 
 
-
-// app.post("/api/camera/config", (req, res) => {
-
-//   console.log("NEW POST CAMERA CONFIGURATION:", req.body);
-
-//   try {
-//     const {CAMERA_MODE,format,resolution,fps,bitrate,EXTENSION,DEVICE_NODE,camera_network,PTZ_STATE,IMAGE_SETTINGS} = req.body;
-
-//     // Validate required video settings
-//     if (format && !CAMERA_CONFIGURATION_CAP.REC_FORMATS.includes(format.toUpperCase())) {
-//       return res.status(400).json({ error: "Invalid format" });
-//     }
-
-//     if (resolution && !CAMERA_CONFIGURATION_CAP.REC_RESOLUTIONS.includes(resolution)) {
-//       return res.status(400).json({ error: "Invalid resolution" });
-//     }
-
-//     if (fps && !CAMERA_CONFIGURATION_CAP.REC_FPS.includes(Number(fps))) {
-//       return res.status(400).json({ error: "Invalid FPS" });
-//     }
-
-//     if (bitrate && !CAMERA_CONFIGURATION_CAP.REC_BITERATE.includes(bitrate)) {
-//       return res.status(400).json({ error: "Invalid bitrate" });
-//     }
-
-//     if (CAMERA_MODE && !CAMERA_CONFIGURATION_CAP.CAMERA_MODE.includes(CAMERA_MODE)) {
-//       return res.status(400).json({ error: "Invalid camera mode" });
-//     }
-//      if (EXTENSION && !CAMERA_CONFIGURATION_CAP.EXTENSION.includes(EXTENSION  )) {
-//       return res.status(400).json({ error: "Invalid extension" });
-//     }
-
-//     // Update camera mode
-//     if (CAMERA_MODE) {
-//       CAMERA_CONFIGURATION.CAMERA_MODE = CAMERA_MODE;
-//     }
-
-//     // Update video settings
-//     if (format) {
-//       CAMERA_CONFIGURATION.format = format.toLowerCase();
-//     }
-//     if (resolution) {
-//       CAMERA_CONFIGURATION.resolution = resolution;
-//       // Derive width/height
-//       // const [width, height] = resolution.split("x").map(Number);
-//       // CAMERA_CONFIGURATION.width = width;
-//       // CAMERA_CONFIGURATION.height = height;
-//     }
-//     if (fps) {
-//       CAMERA_CONFIGURATION.fps = Number(fps);
-//     }
-//     if (bitrate) {
-//       CAMERA_CONFIGURATION.bitrate = bitrate;
-//     }
-//     if (EXTENSION) {
-//       CAMERA_CONFIGURATION.EXTENSION = EXTENSION;
-//     }
-
-//     // Update USB settings
-//     if (DEVICE_NODE) {
-//       CAMERA_CONFIGURATION.DEVICE_NODE = DEVICE_NODE;
-//     }
-
-
-//     // Update network settings
-//     if (camera_network) {
-//       CAMERA_CONFIGURATION.camera_network = {
-//         ...CAMERA_CONFIGURATION.camera_network,
-//         ...camera_network
-//       };
-
-//     CAMERA_CONFIGURATION.camera_network.rtspUrl     = `rtsp://${CAMERA_CONFIGURATION.camera_network.httpUser}:${CAMERA_CONFIGURATION.camera_network.httpPass}@${CAMERA_CONFIGURATION.camera_network.ip}:${CAMERA_CONFIGURATION.camera_network.rtspPort}${CAMERA_CONFIGURATION.camera_network.rtspPath}`;
-//     CAMERA_CONFIGURATION.camera_network.httpCgiBase = `http://${CAMERA_CONFIGURATION.camera_network.httpUser}:${CAMERA_CONFIGURATION.camera_network.httpPass}@${CAMERA_CONFIGURATION.camera_network.ip}`;
-//     stopMediaMtx(); // START AUTOMATICALLY 
-//    // setTimeout(startMediaMtx, 3000);   
-//   }
-
-//     // Update PTZ settings
-//     if (PTZ_STATE) {
-//       CAMERA_CONFIGURATION.PTZ_STATE = {
-//         ...CAMERA_CONFIGURATION.PTZ_STATE,
-//         ...PTZ_STATE
-//       };
-//     }
-
-//     // Update image settings
-//     if (IMAGE_SETTINGS) {
-//       CAMERA_CONFIGURATION.IMAGE_SETTINGS = {
-//         ...CAMERA_CONFIGURATION.IMAGE_SETTINGS,
-//         ...IMAGE_SETTINGS
-//       };
-//     }
-
-//     console.log("✅ UPDATED CAMERA CONFIG:", CAMERA_CONFIGURATION);
-//     saveCameraConfig();
-//     res.json({success: true,message: "CONFIGURATION_SAVED",current: CAMERA_CONFIGURATION});
-
-//   }catch (error){
-//     console.error("❌ Configuration save error:", error);
-//     res.status(500).json({success: false,error: "CONFIGURATION_SAVE_FAILED",message: error.message});
-//   }
-
-// });
-
 CAMERA_CONFIGURATION.camera_network.rtspUrl     = `rtsp://${CAMERA_CONFIGURATION.camera_network.httpUser}:${CAMERA_CONFIGURATION.camera_network.httpPass}@${CAMERA_CONFIGURATION.camera_network.ip}:${CAMERA_CONFIGURATION.camera_network.rtspPort}${CAMERA_CONFIGURATION.camera_network.rtspPath}`;
 CAMERA_CONFIGURATION.camera_network.httpCgiBase = `http://${CAMERA_CONFIGURATION.camera_network.httpUser}:${CAMERA_CONFIGURATION.camera_network.httpPass}@${CAMERA_CONFIGURATION.camera_network.ip}`;
 
@@ -1297,9 +1195,6 @@ function loadCameraConfig(){
 
 
 
-function isSafeName(name) {
-  return /^[a-zA-Z0-9._-]+$/.test(name);
-}
 function isSafeName(name) {
   return /^[a-zA-Z0-9._-]+$/.test(name);
 }
@@ -3418,10 +3313,14 @@ app.post("/start", async (req, res) => {
 //  "TIMER_MSEC":null,
 //  "TIMER_STATE" : false,
 //  "AUDIO_MUTE_FLAG": true 
-    const { filename, AUDIO_MUTE_FLAG , TIMER_MSEC, TIMER_STATE ,EXT_DETAILS} = req.body;
-     const FILE_NAME_TEMP = typeof filename === "string" && filename.trim() ? filename.trim() : `video_${GET_DATE_TIME_FORMATED()}`;
 
-  
+    const { filename, AUDIO_MUTE_FLAG , TIMER_MSEC, TIMER_STATE ,EXT_DETAILS} = req.body;
+    const FILE_NAME_TEMP = typeof filename === "string" && filename.trim() ? filename.trim() : `video_${GET_DATE_TIME_FORMATED()}`;
+
+ if (!isSafeName(FILE_NAME_TEMP)){
+     return res.status(400).json({ error: "INVALID_REQUEST_filename_character" });
+    }
+
     const { mount, size } = await detectSdCardAsync();
     if(!mount){
       return res.status(400).json({ error: "SD_CARD_NOT_DETECTED" });
@@ -3479,9 +3378,6 @@ app.post("/start", async (req, res) => {
        
      return res.json({
       success: true,
-      // filename:  RECORDING_STATE.FINAL_FILE_NAME,
-      // url:       RECORDING_STATE.FINAL_FILE_URL_PATH,
-      // state:     RECORDING_STATE.status,
       RECORDING_STATE :CAMERA_STATE_STATUS(),
     });
   }
@@ -3516,15 +3412,7 @@ app.post("/pause", async (req, res) => {
          await killFFmpeg("PAUSED_STATE STOP FFmpeg.....");
         console.log("⏸ RECORDING PAUSED at", RECORDING_STATE.PAUSED_AT_TIME);
 
-    //   return res.json({
-    //   success: true,
-    //   filename:   RECORDING_STATE.FINAL_FILE_NAME,
-    //   foldername : RECORDING_STATE.VIDEO_FOLDER_NAME,
-    //   url:       path.join( "videos",RECORDING_STATE.VIDEO_FOLDER_NAME, RECORDING_STATE.FINAL_FILE_NAME), //RECORDING_STATE.FINAL_FILE_SAVE_PATH,
-    //   state: RECORDING_STATE.status,
-    //   RECORDING_STATE :RECORDING_STATE,
-    //   CAM_CONFIG : null
-    // });
+   
 
      return res.json({
       success: true,
@@ -3597,10 +3485,6 @@ app.post("/resume", async(req, res) => {
      return res.json({
       success: true,
       RECORDING_STATE :CAMERA_STATE_STATUS()
-      // filename:  RECORDING_STATE.FINAL_FILE_NAME,
-      // url:       RECORDING_STATE.FINAL_FILE_URL_PATH,
-      // state:     RECORDING_STATE.status,
-      // TOT_PAUSED_DURATION_MS : RECORDING_STATE.TOT_PAUSED_DURATION_MS 
     });
   }
     },500); 
@@ -3872,10 +3756,6 @@ app.post("/stop", async (req, res) => {
        res.json({
        success: true,
        RECORDING_STATE :CAMERA_STATE_STATUS()
-      // filename:  RECORDING_STATE.FINAL_FILE_NAME,
-      // url:       RECORDING_STATE.FINAL_FILE_URL_PATH,
-      // state:     RECORDING_STATE.status,
-      // RECORDING_STATE :RECORDING_STATE 
     });
         STOPING_RUNNING_FLAG = false;
         RESET_DAUFALT_CAMERA_STATE();
@@ -4320,7 +4200,7 @@ app.get("/api/download/file/:folder/:filename", (req, res) => {
     const { folder, filename } = req.params;
 
     // 2️⃣ Security: prevent path traversal
-    if (!isSafeName(folder) || !isSafeName(filename)) {
+    if (!isSafeName(folder) || !isSafeName(filename)){
       return sendError(res, 400, "INVALID_PATH", "Invalid folder or filename");
     }
 
