@@ -355,13 +355,13 @@ async function enableEthernet() {
 // ip link set eth0 up	Enable Ethernet interface
 // nmcli device connect eth0	Ask NetworkManager to reconnect
   try {
-    await execPromise("sudo ip link set eth0 down");
+   //await execPromise("sudo ip link set eth0 down");
   } catch (error) {
     console.error("❌ enableEthernet step 1 failed:", error);
   }
    await new Promise(r => setTimeout(r,1000))
   try {
-    await execPromise("sudo ip addr flush dev eth0");
+   // await execPromise("sudo ip addr flush dev eth0");
   } catch (error) {
     console.error("❌ enableEthernet step 2 failed:", error);
   }
@@ -668,7 +668,7 @@ async function SYSTEM_NETWORK_SETTING(){
     CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.SYSTEM_MAC_ADDRESS =`ETH: ${SYSTEM_MAC_ADDRESS.eth0 || "NA"}|WIFI: ${SYSTEM_MAC_ADDRESS.wlan0 || "NA"}`;
     console.log("SYSTEM_MAC_ADDRESS:" ,CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.SYSTEM_MAC_ADDRESS);
 
-      await enableEthernet();
+     await enableEthernet();
       await new Promise(r => setTimeout(r,1000))
        await network.addIP("eth0", "192.168.100.1/24").catch(()=>{});
        if(CAMERA_CONFIGURATION.camera_network.GATE_WAY != "192.168.100.1" ){
