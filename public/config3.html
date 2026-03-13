@@ -926,6 +926,164 @@
       </div>
     </div>
 
+
+
+ <!-- Tab: SBC Network -->
+    <div id="tab-sbc-network" class="tab-content">
+      <div class="config-grid">
+        
+        <div class="card">
+          <div class="card-header">
+            <span class="card-icon">🌐</span>
+            <span class="card-title">SBC System Network</span>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Connection Type</label>
+            <div class="radio-group">
+              <label class="radio-item">
+                <input type="radio" name="sbcNetworkType" value="WIFI" checked>
+                <span>WiFi</span>
+              </label>
+              <label class="radio-item">
+                <input type="radio" name="sbcNetworkType" value="ETHERNET">
+                <span>Ethernet</span>
+              </label>
+              <label class="radio-item">
+                <input type="radio" name="sbcNetworkType" value="ETHERNET & WIFI">
+                <span>Both</span>
+              </label>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Subnet Mask</label>
+              <input type="text" class="form-control" id="sbc_subnetMask" placeholder="255.255.255.0">
+            </div>
+            <div class="form-group">
+              <label class="form-label">System MAC Address</label>
+              <input type="text" class="form-control" id="sbc_systemMacAddress" readonly>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Gateway</label>
+              <input type="text" class="form-control" id="sbc_gateway" placeholder="192.168.29.1">
+            </div>
+            <div class="form-group">
+              <label class="form-label">DNS Address</label>
+              <input type="text" class="form-control" id="sbc_dns" placeholder="8.8.8.8">
+            </div>
+          </div>
+
+          <!-- WiFi Settings -->
+          <div id="wifiSettingsSection">
+            <div class="card-header" style="margin-top: 20px;">
+              <span class="card-icon">📶</span>
+              <span class="card-title">WiFi Configuration</span>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Network Mode (WiFi)</label>
+              <div class="radio-group">
+                <label class="radio-item">
+                  <input type="radio" name="wifiNetworkMode" value="DHCP" checked>
+                  <span>DHCP (Automatic)</span>
+                </label>
+                <label class="radio-item">
+                  <input type="radio" name="wifiNetworkMode" value="STATIC">
+                  <span>Static IP</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">Static IP Address (WiFi)</label>
+                <input type="text" class="form-control" id="sbc_staticIP_wifi" placeholder="192.168.XX.XX">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Dynamic IP Address (WiFi)</label>
+                <input type="text" class="form-control" id="sbc_dynamicIP_wifi" placeholder="Auto-assigned" readonly>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">MAC Address (wifi)</label>
+              <input type="text" class="form-control" id="sbc_macAddress_wifi" readonly>
+             </div>
+
+
+            <div class="form-group">
+              <label class="form-label">WiFi SSID</label>
+              <input type="text" class="form-control" id="sbc_wifiSSID" placeholder="hemant">
+              <button class="btn btn-primary btn-sm btn-inline" id="scanWifiBtn">📡 Scan Networks</button>
+            </div>
+
+            <div class="form-group" id="wifiListContainer" style="display: none;">
+              <label class="form-label">Available Networks</label>
+              <div class="wifi-list" id="wifiList">
+                <!-- WiFi networks will be populated here -->
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">WiFi Password</label>
+              <input type="password" class="form-control" id="sbc_wifiPassword" placeholder="Enter password">
+            </div>
+
+              
+
+          </div>
+
+          <!-- Ethernet Settings -->
+          <div id="ethernetSettingsSection">
+            <div class="card-header" style="margin-top: 20px;">
+              <span class="card-icon">🔌</span>
+              <span class="card-title">Ethernet Configuration</span>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Network Mode (Ethernet)</label>
+              <div class="radio-group">
+                <label class="radio-item">
+                  <input type="radio" name="ethernetNetworkMode" value="DHCP" checked>
+                  <span>DHCP (Automatic)</span>
+                </label>
+                <label class="radio-item">
+                  <input type="radio" name="ethernetNetworkMode" value="STATIC">
+                  <span>Static IP</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">Static IP Address (Ethernet)</label>
+                <input type="text" class="form-control" id="sbc_staticIP_ethernet" placeholder="192.168.XX.XX">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Dynamic IP Address (Ethernet)</label>
+                <input type="text" class="form-control" id="sbc_dynamicIP_ethernet" placeholder="Auto-assigned" readonly>
+              </div>
+
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">MAC Address (Ethernet)</label>
+              <input type="text" class="form-control" id="sbc_macAddress_ethernet" readonly>
+            </div>
+
+          </div>
+
+        </div>
+
+      </div>
+    </div>
+
+
     <!-- Tab: Camera Network -->
     <!-- <div id="tab-camera-network" class="tab-content">
       <div class="config-grid">
@@ -974,7 +1132,8 @@
     </div> -->
 
     <!-- Tab: SBC Network -->
-    <div id="tab-sbc-network" class="tab-content">
+
+    <!-- <div id="tab-sbc-network" class="tab-content">
       <div class="config-grid">
         
         <div class="card">
@@ -1015,6 +1174,7 @@
             </div>
           </div>
 
+
           <div class="form-row">
             <div class="form-group">
               <label class="form-label">Static IP Address</label>
@@ -1048,7 +1208,7 @@
             </div>
           </div>
 
-          <!-- WiFi Settings -->
+       
           <div id="wifiSettings">
             <div class="form-group">
               <label class="form-label">WiFi SSID</label>
@@ -1059,7 +1219,7 @@
             <div class="form-group" id="wifiListContainer" style="display: none;">
               <label class="form-label">Available Networks</label>
               <div class="wifi-list" id="wifiList">
-                <!-- WiFi networks will be populated here -->
+              
               </div>
             </div>
 
@@ -1072,7 +1232,7 @@
         </div>
 
       </div>
-    </div>
+    </div> -->
 
     <!-- Action Buttons -->
     <div class="btn-group">
