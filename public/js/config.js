@@ -21,6 +21,7 @@ class ConfigController {
 
   // Tab Switching
   setupTabSwitching() {
+    
     window.switchTab = (tabName) => {
       document.querySelectorAll('.tab-content').forEach(tab => {
         tab.classList.remove('active');

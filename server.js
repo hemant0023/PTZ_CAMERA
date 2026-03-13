@@ -651,7 +651,7 @@ let LIVE_STREAM_ENABLED = true;
 
 let  videosDir    = null;
 let  sdMountPoint = null;
-const SD_CARD_MIN_REQUIRED_MB = 2 * 1024; // 1GB free space required to allow recording
+const SD_CARD_MIN_REQUIRED_MB = 5 * 1024; // 1GB free space required to allow recording
 let SD_CARD_FREE_SPACE = 0;
 
 
@@ -853,6 +853,7 @@ function RESET_DAUFALT_CAMERA_STATE(){
 function CAMERA_STATE_STATUS(){
 
   let CAMERA_STATE_STATUS = { 
+    CAMERA_ONLINE: camera_network.CAMERA_ONLINE,
     STATUS: RECORDING_STATE.status,
     ACTIVE: RECORDING_STATE.active,
     PAUSED: RECORDING_STATE.paused,
@@ -877,10 +878,6 @@ function CAMERA_STATE_STATUS(){
 app.get("/api/recording/status", (req, res) => {
   res.json(CAMERA_STATE_STATUS());
    console.log("HOME PAGE STATE REQUEST ", CAMERA_STATE_STATUS());
-});
-
-app.get("/hello", (req, res) => {
-  res.json(CAMERA_STATE_STATUS());
 });
 
 
@@ -1718,8 +1715,6 @@ app.get("/api/ptz/info/device",  async (req, res) => res.json(await cgiRequest("
 app.get("/api/ptz/info/serial",  async (req, res) => res.json(await cgiRequest("/cgi-bin/param.cgi?get_serial_number")));
 
 
-
-
 // ============================================================================
 // ROUTE: HOME POSITION
 // GET  /api/ptz/home
@@ -2102,12 +2097,11 @@ function getFreeSpaceMB(mountPoint, callback) {
       return callback(false);
     }
 
-
     function deleteNext() {
 
       getFreeSpaceMB(sdMountPoint, (freeMB) => {
         if (freeMB >= requiredFreeMB) {
-          console.log("✅ Storage recovered:", freeMB, "MB");
+           console.log("✅ Storage recovered:", freeMB, "MB");
           return callback(true);
         }
 
@@ -2223,13 +2217,80 @@ function detectSdCardAsync(){
      
 }
 
+// /api/sdcard/delete-all?confirm=yes
+function deleteAllRecordings(sdMountPoint, callback) {
+
+  try {
+
+    const videosPath = path.join(sdMountPoint, "videos");
+
+    if (!fs.existsSync(videosPath)) {
+      console.warn("⚠ Videos folder not found");
+      return callback(false);
+    }
+
+    const folders = fs.readdirSync(videosPath);
+
+    for (const folder of folders) {
+      const fullPath = path.join(videosPath, folder);
+
+      console.log("🗑 Deleting:", fullPath);
+
+      fs.rmSync(fullPath, { recursive: true, force: true });
+    }
+
+    detectSdCardAsync();
+    console.log("✅ All recordings deleted");
+    callback(true);
+
+  } catch (err) {
+    console.error("❌ Delete SD recordings error:", err);
+    callback(false);
+  }
+}
+
+app.get("/api/sdcard/delete-all", async (req, res) => {
+
+  try {
+
+   if (req.query.confirm !== "yes") {
+      return res.status(400).json({
+      error: "CONFIRM_DELETE_REQUIRED"
+    });
+}
+    const { mount } = await detectSdCardAsync();
+
+    deleteAllRecordings(mount, (status) => {
+
+      if (!status) {
+        return res.status(500).json({
+          error: "DELETE_FAILED"
+        });
+      }
+
+      res.json({
+        success: true,
+        message: "All SD recordings deleted"
+      });
+
+    });
+
+  } catch (err) {
+
+    res.status(400).json({
+      error: err.message
+    });
+
+  }
+
+});
+
+
 
 app.get("/api/sdcard/check", async (req, res) => {
 
   try {
-
     const { mount, size } = await detectSdCardAsync();
-
     if (size <= SD_CARD_MIN_REQUIRED_MB) {
       return res.status(400).json({error: "SD_CARD_CAPACITY_FULL"});
     }
@@ -2241,12 +2302,13 @@ app.get("/api/sdcard/check", async (req, res) => {
     });
 
   } catch (err) {
-
     res.status(400).json({
       error: err.message
     });
   }
 });
+
+
 
 function getUniqueFilePath(dir, baseName, ext){
 
@@ -2983,6 +3045,9 @@ async function killFFmpeg(reason = "UNKNOWN"){
       ffmpegProcess.removeAllListeners();
       ffmpegProcess.stdout.unpipe();
 
+      await new Promise(r => setTimeout(r,200));
+      ffmpegProcess.stdin.write('q');
+
     //ffmpegProcess.kill("SIGTERM");
     ffmpegProcess.kill("SIGINT");
     
@@ -3043,7 +3108,31 @@ function findMoovEnd(buffer){
 // "snapshot.jpg"
 
 //CAMERA_CONFIGURATION.CAMERA_MODE ="USB";
+// Understanding the Flags
+// frag_keyframe
 
+// Creates fragment at each keyframe
+// Ensures clean segment boundaries
+// Makes merging reliable
+
+// empty_moov
+
+// Writes moov atom at START of file
+// File is valid even if incomplete
+// No waiting until end to write metadata
+
+// default_base_moof
+
+// Each fragment is self-contained
+// No dependency on other fragments
+// Merge works even with partial fragments
+
+// frag_duration: 2000000
+
+// Write fragment metadata every 2 seconds
+// Microseconds (2000000 = 2 seconds)
+// Smaller = more resilient (every 1 second)
+// Larger = more efficient (every 5 seconds)
 
 function RUN_FFMPEG_ARGUMENT_COMMAND({ outputPath = null, enableLive = false }){
   
@@ -3098,15 +3187,25 @@ function RUN_FFMPEG_ARGUMENT_COMMAND({ outputPath = null, enableLive = false }){
     "-use_wallclock_as_timestamps", "1"
   ];
 
-  // 🎥 OUTPUT MODE
-  if (enableLive && outputPath){
+
+  if (enableLive && outputPath) {
+  console.log("✅ FFMPEG enableLive && outputPath", outputPath);
+  args.push(
+    "-f", "tee",
+    `[f=mp4:movflags=frag_keyframe+empty_moov+default_base_moof]${outputPath}|` +  // ✅ CHANGED
+    `[f=rtsp:rtsp_transport=tcp]rtsp://localhost:8554/live_camera`
+  );
+
+
+  // // 🎥 OUTPUT MODE
+  // if (enableLive && outputPath){
    
-    console.log("✅ FFMPEG enableLive && outputPath",outputPath);
-    args.push(
-      "-f", "tee",
-      //`[f=mp4:movflags=+faststart]${outputPath}|` + `[f=mp4:g=30:keyint_min=30:sc_threshold=0:movflags=frag_keyframe+empty_moov+default_base_moof:frag_duration=100000]pipe:1`
-      `[f=mp4:movflags=+faststart]${outputPath}|` + `[f=rtsp:rtsp_transport=tcp]rtsp://localhost:8554/live_camera`
-    );
+  //   console.log("✅ FFMPEG enableLive && outputPath",outputPath);
+  //   args.push(
+  //     "-f", "tee",
+  //     //`[f=mp4:movflags=+faststart]${outputPath}|` + `[f=mp4:g=30:keyint_min=30:sc_threshold=0:movflags=frag_keyframe+empty_moov+default_base_moof:frag_duration=100000]pipe:1`
+  //     `[f=mp4:movflags=+faststart]${outputPath}|` + `[f=rtsp:rtsp_transport=tcp]rtsp://localhost:8554/live_camera`
+  //   );
 
   }else if(enableLive){
    
@@ -3127,14 +3226,24 @@ function RUN_FFMPEG_ARGUMENT_COMMAND({ outputPath = null, enableLive = false }){
     // "pipe:1"
     );
 
-   }else if(outputPath){
+    } else if (outputPath) {
+  console.log("✅ FFMPEG outputPath ONLY");
+  args.push(
+    "-f", "mp4",
+    "-movflags", "frag_keyframe+empty_moov+default_base_moof",  // ✅ ADD THIS
+    "-frag_duration", "2000000",  // ✅ ADD THIS (2 seconds)
+    outputPath
+  );
+
+
+  //  }else if(outputPath){
     
-    console.log("✅ FFMPEG  outputPath ONLY");
-    args.push(
-     "-f", "mp4",
-    "-movflags", "+faststart",
-     outputPath
-    );
+  //   console.log("✅ FFMPEG  outputPath ONLY");
+  //   args.push(
+  //    "-f", "mp4",
+  //   "-movflags", "+faststart",
+  //    outputPath
+  //   );
 
   }else{ 
     FFMPEG_ERROR.result = false;
@@ -3170,16 +3279,32 @@ function RUN_FFMPEG_ARGUMENT_COMMAND({ outputPath = null, enableLive = false }){
      "-map", "0:v",
      "-avoid_negative_ts", "make_zero",
      "-use_wallclock_as_timestamps", "1",
+
+
      "-flush_packets", "1",
      "-f", "mp4",
-    "-movflags", "+faststart",
+     "-movflags", "frag_keyframe+empty_moov+default_base_moof",  // ✅ This prevents corruption
+     "-frag_duration", "2000000",  // ✅ Write metadata every 2 seconds
+
+    //"-movflags", "+faststart",
      outputPath
+
     // "-f", "mp4",
     // "-movflags", "frag_keyframe+empty_moov+default_base_moof",
-   //  "-frag_duration", "100000",
+   //  "-frag_duration", "200000",
     // "pipe:1"
 ];
 
+// Segment structure with +faststart:
+// [header][video data][video data]...[moov at END]
+//          ↑ If crash here, moov never written → CORRUPTED
+// ```
+
+// **After:**
+// ```
+// Segment structure with fragmented MP4:
+// [header][empty moov][fragment 1+metadata][fragment 2+metadata]...
+//          ✅ moov at START, metadata every 2 sec → SAFE
 
  }else{
     
@@ -3496,64 +3621,228 @@ app.post("/resume", async(req, res) => {
 
 });
 
+async function isValidMP4(filePath) {
+  try {
+    // Quick check: file must have some minimum size (at least 1KB)
+    const stat = fs.statSync(filePath);
+    if (stat.size < 1024) {
+      console.log(`⚠️ File too small: ${path.basename(filePath)} (${stat.size} bytes)`);
+      return false;
+    }
+ 
+    // Use ffprobe to check for moov atom
+    const { stdout, stderr } = await execPromise(`ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${filePath}"`,
+      { timeout: 5000 }
+    );
+ 
+    // If ffprobe succeeds and returns a duration, file is valid
+    const duration = parseFloat(stdout.trim());
+    if (!isNaN(duration) && duration > 0) {
+      return true;
+    }
+ 
+    console.log(`⚠️ Invalid MP4 (no duration): ${path.basename(filePath)}`);
+    return false;
+ 
+  } catch (error) {
+    // ffprobe failed - file is corrupted
+    if (error.message.includes('moov atom not found')) {
+      console.log(`❌ Corrupted MP4 (no moov atom): ${path.basename(filePath)}`);
+    } else {
+      console.log(`⚠️ ffprobe error for ${path.basename(filePath)}: ${error.message}`);
+    }
+    return false;
+  }
+}
+
+
+// /**
+//  * Get valid MP4 files from a directory
+//  * @param {string} dirPath - Directory path
+//  * @returns {Promise<Array>} - Array of valid MP4 filenames
+//  */
+// async function getValidMP4Files(dirPath) {
+//   try {
+//     if (!fs.existsSync(dirPath)) {
+//       return [];
+//     }
+ 
+//     const allFiles = fs.readdirSync(dirPath)
+//       .filter(f => f.toLowerCase().endsWith('.mp4'));
+ 
+//     // Check each file in parallel
+//     const validityChecks = await Promise.all(
+//       allFiles.map(async (file) => {
+//         const filePath = path.join(dirPath, file);
+//         const isValid = await isValidMP4(filePath);
+//         return { file, isValid };
+//       })
+//     );
+ 
+//     // Return only valid files
+//     const validFiles = validityChecks
+//       .filter(check => check.isValid)
+//       .map(check => check.file);
+ 
+//     const corruptedCount = allFiles.length - validFiles.length;
+//     if (corruptedCount > 0) {
+//       console.log(`⚠️ Found ${corruptedCount} corrupted MP4 files in ${path.basename(dirPath)}`);
+//     }
+ 
+//     return validFiles;
+ 
+//   } catch (error) {
+//     console.error('Error checking MP4 files:', error);
+//     return [];
+//   }
+// }
+ 
+// /**
+//  * Move corrupted files to a quarantine folder
+//  * @param {string} dirPath - Directory to scan
+//  * @returns {Promise<number>} - Number of files quarantined
+//  */
+// async function quarantineCorruptedFiles(dirPath) {
+//   try {
+//     if (!fs.existsSync(dirPath)) {
+//       return 0;
+//     }
+ 
+//     const quarantineDir = path.join(dirPath, '_corrupted');
+    
+//     const allFiles = fs.readdirSync(dirPath)
+//       .filter(f => f.toLowerCase().endsWith('.mp4'));
+ 
+//     let quarantined = 0;
+ 
+//     for (const file of allFiles) {
+//       const filePath = path.join(dirPath, file);
+//       const isValid = await isValidMP4(filePath);
+ 
+//       if (!isValid) {
+//         // Create quarantine directory if it doesn't exist
+//         if (!fs.existsSync(quarantineDir)) {
+//           fs.mkdirSync(quarantineDir, { recursive: true });
+//         }
+ 
+//         // Move corrupted file to quarantine
+//         const quarantinePath = path.join(quarantineDir, file);
+//         fs.renameSync(filePath, quarantinePath);
+//         console.log(`🗑️ Quarantined: ${file}`);
+//         quarantined++;
+//       }
+//     }
+ 
+//     return quarantined;
+ 
+//   } catch (error) {
+//     console.error('Error quarantining files:', error);
+//     return 0;
+//   }
+// }
+ 
+// /**
+//  * Delete corrupted files (use with caution)
+//  * @param {string} dirPath - Directory to scan
+//  * @returns {Promise<number>} - Number of files deleted
+//  */
+// async function deleteCorruptedFiles(dirPath) {
+//   try {
+//     if (!fs.existsSync(dirPath)) {
+//       return 0;
+//     }
+ 
+//     const allFiles = fs.readdirSync(dirPath)
+//       .filter(f => f.toLowerCase().endsWith('.mp4'));
+ 
+//     let deleted = 0;
+ 
+//     for (const file of allFiles) {
+//       const filePath = path.join(dirPath, file);
+//       const isValid = await isValidMP4(filePath);
+ 
+//       if (!isValid) {
+//         fs.unlinkSync(filePath);
+//         console.log(`🗑️ Deleted corrupted: ${file}`);
+//         deleted++;
+//       }
+//     }
+ 
+//     return deleted;
+ 
+//   } catch (error) {
+//     console.error('Error deleting corrupted files:', error);
+//     return 0;
+//   }
+// }
+ 
+// module.exports = {
+//   isValidMP4,
+//   getValidMP4Files,
+//   quarantineCorruptedFiles,
+//   deleteCorruptedFiles
+// };
 
 let segmentListFile = null;
+
 async function mergeSegmentsWithRetry(segments, finalMp4, maxRetries = 3){
  
   for (let attempt = 1; attempt <= maxRetries; attempt++){
     console.log(`🔄 MERGE REC FILE ATTEMPT: ${attempt}/${maxRetries}`);
     try{
 
-      const missingFiles = [];
-      const emptyFiles   = [];
-      const validSegments = [];
-
-      // for (const file of segments){
-      //   if (!fs.existsSync(file)){
-      //        missingFiles.push(file);
-      //   }else{
-      //      const stats = fs.statSync(file);
-      //      if(stats.size === 0){
-      //       emptyFiles.push(file);}
-      //   }
-      // }
-      
-      // if (missingFiles.length > 0) {
-      //   throw new Error(`Missing segments: ${missingFiles.join(', ')}`);
-      // }
-      
-      // if (emptyFiles.length > 0) {
-      //   console.log(`⚠️ Empty segments found: ${emptyFiles.join(', ')}`);
-      // }
-
     
-
+      const corruptedSegments = [];
+      const missingSegments = [];
+      const validSegments = [];
+     console.log(`📋 Checking ${segments.length} segments...`);
+      
+    
 for (const file of segments){
 
-  if (!fs.existsSync(file)){
-    console.warn("❌ Missing segment:", file);
-    continue;
-  }
+  if (!fs.existsSync(file)) {
+          console.warn(`❌ Missing segment: ${path.basename(file)}`);
+          missingSegments.push(file);
+          continue;
+        }
 
   const stats = fs.statSync(file);
-
   if (stats.size < 1000){   // less than 1KB = broken
-    console.warn("⚠️ Ignoring corrupted segment:", file);
+      console.warn(`⚠️ corruptedSegments too small (${stats.size} bytes): ${path.basename(file)}`);
+      corruptedSegments.push(file);
     continue;
   }
 
+       const isValid = await isValidMP4(file);
+        if (!isValid) {
+          console.warn(`⚠️ Corrupted segment (no moov): ${path.basename(file)}`);
+          corruptedSegments.push(file);
+          continue;
+        }
+   
   validSegments.push(file);
+   console.log(`✅ Valid recording file : ${path.basename(file)} (${(stats.size / (1024 * 1024)).toFixed(2)} MB)`);
 }
 
-if (validSegments.length === 0){
-  throw new Error("NO_VALID_SEGMENTS_FOUND");
-}
 
-console.log("✅ Valid segments:", validSegments.length);
+  // Report issues
+      if (missingSegments.length > 0) {
+        console.warn(`⚠️ ${missingSegments.length} missing segments (skipped)`);
+      }
+      
+      if (corruptedSegments.length > 0) {
+        console.warn(`⚠️ ${corruptedSegments.length} corrupted segments (skipped)`);
+      }
+ 
+      // Check if we have any valid segments
+      if (validSegments.length === 0) {
+        throw new Error("NO_VALID_SEGMENTS_FOUND");
+      }
+ 
+      console.log(`✅ Using ${validSegments.length} valid segments for merge`);
+ 
       const segmentListFile = path.join(videosDir, `rec_video_segments_${Date.now()}.txt`);
-     // fs.writeFileSync(segmentListFile, segments.map(f => `file '${f}'`).join("\n"));
       fs.writeFileSync(segmentListFile,validSegments.map(f => `file '${f}'`).join("\n"));
-
       console.log("📄 Segment list created:", segmentListFile);   
 
       const result = await new Promise((resolve, reject) => {
@@ -3652,6 +3941,32 @@ console.log("✅ Valid segments:", validSegments.length);
            });
 
       });
+
+       // ============================================
+      // STEP 5: CLEANUP CORRUPTED SEGMENTS (OPTIONAL)
+      // ============================================
+      
+      // Optionally move corrupted segments to a quarantine folder
+      if (corruptedSegments.length > 0) {
+        const quarantineDir = path.join(videosDir, '_corrupted_segments');
+        if (!fs.existsSync(quarantineDir)) {
+          fs.mkdirSync(quarantineDir, { recursive: true });
+        }
+ 
+        for (const corruptedFile of corruptedSegments) {
+          try {
+            if (fs.existsSync(corruptedFile)) {
+              const basename = path.basename(corruptedFile);
+              const quarantinePath = path.join(quarantineDir, `${Date.now()}_${basename}`);
+              fs.renameSync(corruptedFile, quarantinePath);
+              console.log(`🗑️ Quarantined corrupted segment: ${basename}`);
+            }
+          } catch (e) {
+            console.warn(`⚠️ Failed to quarantine ${path.basename(corruptedFile)}:`, e.message);
+          }
+        }
+      }
+ 
       
       return result; // Success!
       
