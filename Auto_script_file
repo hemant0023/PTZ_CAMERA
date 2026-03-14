@@ -5,13 +5,17 @@ Wants=network-online.target
 
 [Service]
 # Run as root (camera + v4l2 + hostname + mDNS)
-User=root
+User=root # System user (not tied to login session)
 Group=root
+
+# Type=simple                # Main process, systemd manages it                 
+# KillMode=mixed             # Only kill main process on stop
+# RemainAfterExit=no         # Don't keep service "active" after process exits
+# DefaultDependencies=yes    # Use standard systemd dependencies
 
 # Project directory
 #WorkingDirectory=/home/khadas/CAMERA_PROJECT
 WorkingDirectory=/home/khadas/PTZ_BENQ_CAMERA
-
 # Environment
 Environment=NODE_ENV=production
 Environment=PORT=3000
@@ -32,16 +36,28 @@ StandardOutput=journal
 StandardError=journal
 
 # System limits (important for ffmpeg + ws)
-LimitNOFILE=65535
-Nice=-5
 
+TasksMax=infinity
+LimitNOFILE=65535
+Nice=-5 
+
+
+# Wait for network to really be ready
+ExecStartPre=/bin/sleep 5
+
+# Auto restart if system resumes from suspend
+RestartForceExitStatus=SIGPIPE
+
+# Security (optional but good)
+NoNewPrivileges=true
 [Install]
 WantedBy=multi-user.target
 
-
-
-#cat /etc/systemd/system/camera-server.service
-#sudo systemctl daemon-reload //Reload systemd after editing
+systemctl is-enabled camera-server.service
+systemctl is-active camera-server.service
+#cat /etc/systemd/system/camera-server.service  //Reload systemd after editing
+sudo nano /etc/systemd/system/camera-server.service 
+sudo systemctl daemon-reload
 #sudo systemctl start camera-server //Start service
 #sudo systemctl stop camera-server //Stop service
 #sudo systemctl restart camera-server //Restart service
@@ -49,3 +65,9 @@ WantedBy=multi-user.target
 #sudo journalctl -u camera-server -f //Follow logs   
 #sudo systemctl enable camera-server
 #sudo systemctl disable camera-server
+
+systemctl show camera-server.service -p Type
+
+khadas@camera:~/PTZ_BENQ_CAMERA$ ls -la /etc/systemd/system/camera-server.service
+-rw-r--r-- 1 root root 1042 Mar 14 15:25 /etc/systemd/system/camera-server.service
+

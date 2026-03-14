@@ -273,14 +273,14 @@ async function setDynamicIP(iface){
   }
 }
 
-
 // Example: Set static IP
 async function setStaticIP(iface , STATIC_IP_ADDRESS, gateway) {
 
-  //try {
+    console.log('setStaticIP Network ',iface,STATIC_IP_ADDRESS);
+  try {
 
-    await runCommand(`sudo dhclient -r ${iface}`).catch(()=>{});
-   // await runCommand(`sudo ip addr flush dev ${iface}`);
+   // await runCommand("sudo ip addr flush dev eth0");
+   //await runCommand(`sudo dhclient -r ${iface}`).catch(()=>{});
 
     // Add IP
   await  network.addIP(iface ,`${STATIC_IP_ADDRESS}/24`);
@@ -300,16 +300,17 @@ async function setStaticIP(iface , STATIC_IP_ADDRESS, gateway) {
   }
 
     network.addIP("eth0",`${CAMERA_CONFIGURATION.camera_network.GATE_WAY}/24`); 
+   
     // Test connection
-    await network.testPing();
+   // await network.testPing();
     
-    console.log('✅ Network configured successfully');
+    console.log('✅ setStaticIP Network configured successfully');
     return true;
-  // } catch (error) {
+  } catch (error) {
 
-  //   console.error('❌ Network configuration failed:', error);
-  //   return false;
-  // }
+    console.error('❌ setStaticIP onfiguration failed:', error);
+    return false;
+  }
 }
 
 //     // Test connectivity
@@ -354,18 +355,23 @@ async function enableEthernet() {
 // ip addr flush dev eth0	Remove old IP addresses
 // ip link set eth0 up	Enable Ethernet interface
 // nmcli device connect eth0	Ask NetworkManager to reconnect
-  try {
-   //await execPromise("sudo ip link set eth0 down");
-  } catch (error) {
-    console.error("❌ enableEthernet step 1 failed:", error);
-  }
-   await new Promise(r => setTimeout(r,1000))
-  try {
-   // await execPromise("sudo ip addr flush dev eth0");
-  } catch (error) {
-    console.error("❌ enableEthernet step 2 failed:", error);
-  }
-   await new Promise(r => setTimeout(r,1000))
+
+
+// try {
+//      await execPromise("sudo ip link set eth0 down");
+//   } catch (error) {
+//     console.error("❌ enableEthernet step 1 failed:", error);
+//   }
+
+// //    await new Promise(r => setTimeout(r,1000))
+// //   try {
+// //    // await execPromise("sudo ip addr flush dev eth0");
+// //   } catch (error) {
+// //     console.error("❌ enableEthernet step 2 failed:", error);
+// //   }
+
+  await new Promise(r => setTimeout(r,2000))
+
   try {
     await execPromise("sudo ip link set eth0 up");
   } catch (error) {
@@ -376,20 +382,16 @@ async function enableEthernet() {
 
   if(await isEthernetConnected()){
    console.log("Ethernet cable detected");
+   //await execPromise("sudo nmcli device disconnect eth0");
    await execPromise("sudo nmcli device connect eth0");
  }else{
    console.log("Ethernet cable not connected, skipping");
 }
 
-  // try {
-  //   await execPromise("sudo nmcli device connect eth0");
-  // } catch (error) {
-  //   console.error("❌ enableEthernet step 4 failed:", error);
-  // }
 
 }
 
-async function enableWifi() {
+async function enableWifi(){
 
 // sudo nmcli radio wifi off
 // sudo ip link set wlan0 down
@@ -397,21 +399,28 @@ async function enableWifi() {
 // sudo nmcli radio wifi on
 // sudo systemctl restart NetworkManager
 
-try {
-    await execPromise("sudo nmcli radio wifi off");
-  } catch(error) {console.error('❌ enableWifi configuration failed 1:', error);}
+// try {
+//     await execPromise("sudo nmcli radio wifi off");
+//   } catch(error) {console.error('❌ enableWifi configuration failed 1:', error);}
+//   await new Promise(r => setTimeout(r,1000));
 
-try {
-    await execPromise("sudo ip link set wlan0 down");
-  } catch(error) {console.error('❌ enableWifi configuration failed 2:', error);}
+//   try {
+//     await execPromise("sudo ip link set wlan0 down");
+//   } catch(error) {console.error('❌ enableWifi configuration failed 2:', error);}
 
+//   await new Promise(r => setTimeout(r,1000));
 
   try {
     await execPromise("sudo rfkill unblock wifi");
   } catch(error) {console.error('❌ enableWifi configuration failed 3:', error);}
+
+    await new Promise(r => setTimeout(r,1000));
+
   try {
     await execPromise("sudo nmcli radio wifi on");
   } catch(error) {console.error('❌ enableWifi configuration failed 4:', error);}
+
+  await new Promise(r => setTimeout(r,1000));
 
   try {
     await execPromise("sudo ip link set wlan0 up");
@@ -481,9 +490,9 @@ async function connectWifiRetry(ssid, password) {
 
 async function connectWifi(ssid, password) {
 
-  await new Promise(r => setTimeout(r,1000));
-  await enableWifi();
-  await new Promise(r => setTimeout(r,3000));
+ // await new Promise(r => setTimeout(r,1000));
+ // await enableWifi();
+ // await new Promise(r => setTimeout(r,1000));
 
   await execPromise("nmcli -t -f SSID dev wifi list")
   //await new Promise(r => setTimeout(r,1000));
@@ -492,7 +501,9 @@ async function connectWifi(ssid, password) {
 
   const status = await wifiStatus();
   if (status.connected && status.ssid === ssid) {
+
     console.log('WiFi Already connected');
+   
     const ip = getCurrentIPAddress();
     if (ip.wifi){
       console.log("WiFi IP already assigned:", ip.wifi);
@@ -503,23 +514,13 @@ async function connectWifi(ssid, password) {
   }
 
   try {
+
     connectWifiRetry(ssid, password);
+
     //await execPromise(`sudo nmcli device wifi connect "${ssid}" password "${password}"`);
     //await execPromise(`sudo nmcli dev wifi connect "${ssid}" password "${password}" ifname wlan0`);
     console.log('WiFi connected');
 
-    // // wait for DHCP IP
-    // await new Promise(r => setTimeout(r,3000));
-
-    // const ip = getCurrentIPAddress();
-
-    // if (!ip.wifi) {
-    //   throw new Error("WIFI_CONNECTED_NO_IP");
-    // }
-
-    // console.log("WiFi IP assigned:", ip.wifi);
-   //return { success:true, ip: ip.wifi };
-    
    return { success:true};
 
   } catch(err) {
@@ -568,6 +569,7 @@ async function forgetWifi(ssid){
 
 }
 
+ 
 
 app.get('/api/network/wifi/scan', async (req, res) => {
   try {
@@ -577,8 +579,9 @@ app.get('/api/network/wifi/scan', async (req, res) => {
     let networks = [];
     
     try {
-    
-        await enableWifi();
+
+         await enableWifi();
+         await new Promise(r => setTimeout(r,3000));
         const { stdout } = await execPromise('nmcli -t -f SSID,SIGNAL,SECURITY device wifi list');
         console.log(' stdout nmcli  available = ',stdout);
 
@@ -657,6 +660,59 @@ async function getAllMACAddresses() {
 }
 
 
+async function SYSTEM_NETWORK_INIT(){
+
+   let SYSTEM_MAC_ADDRESS = await getAllMACAddresses();
+    CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.SYSTEM_MAC_ADDRESS =`ETH: ${SYSTEM_MAC_ADDRESS.eth0 || "NA"}|WIFI: ${SYSTEM_MAC_ADDRESS.wlan0 || "NA"}`;
+    console.log("SYSTEM_MAC_ADDRESS:" ,CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.SYSTEM_MAC_ADDRESS);
+  
+  // try {
+  //   await execPromise("sudo ip link set eth0 down");
+  // } catch (error) {
+  //   console.error("❌ enableEthernet step 1 failed:", error);
+  // }
+
+   //await runCommand(`sudo dhclient -r ${iface}`).catch(()=>{});
+
+  try {
+   if(await interfaceExists("eth0")){
+     await new Promise(r => setTimeout(r,1000))
+     await execPromise("sudo ip addr flush dev eth0"); }
+   }catch (error) {
+    console.error("❌ enableEthernet step 2 failed:", error);
+  }
+
+       await new Promise(r => setTimeout(r,1000))
+       await enableEthernet(); 
+       await new Promise(r => setTimeout(r,1000))
+
+       await network.addIP("eth0", "192.168.100.1/24").catch(()=>{});
+        if(CAMERA_CONFIGURATION.camera_network.GATE_WAY != "192.168.100.1" ){
+        await network.addIP("eth0",`${CAMERA_CONFIGURATION.camera_network.GATE_WAY}/24`); }
+
+
+   // try {
+//     await execPromise("sudo nmcli radio wifi off");
+//   } catch(error) {console.error('❌ enableWifi configuration failed 1:', error);}
+//   await new Promise(r => setTimeout(r,1000));
+
+//   try {
+//     await execPromise("sudo ip link set wlan0 down");
+//   } catch(error) {console.error('❌ enableWifi configuration failed 2:', error);}
+
+//   await new Promise(r => setTimeout(r,2000));
+
+
+       await enableWifi();
+       await new Promise(r => setTimeout(r,1000));
+       if(await interfaceExists("wlan0")){
+          await runCommand("sudo ip addr flush dev wlan0");
+        }
+
+
+}
+
+
 async function SYSTEM_NETWORK_SETTING(){
 
  
@@ -664,35 +720,37 @@ async function SYSTEM_NETWORK_SETTING(){
    console.log("SYSTEM_NETWORK_ETHERNET_MODE :",CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.SYSTEM_NETWORK_ETHERNET_MODE);
    console.log("SYSTEM_NETWORK_WIFI_MODE :",CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.SYSTEM_NETWORK_WIFI_MODE);
    let DYNAMIC_IP_ADDRESS = null;
-    let SYSTEM_MAC_ADDRESS = await getAllMACAddresses();
-    CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.SYSTEM_MAC_ADDRESS =`ETH: ${SYSTEM_MAC_ADDRESS.eth0 || "NA"}|WIFI: ${SYSTEM_MAC_ADDRESS.wlan0 || "NA"}`;
-    console.log("SYSTEM_MAC_ADDRESS:" ,CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.SYSTEM_MAC_ADDRESS);
+   
+      // await enableEthernet();
 
-     await enableEthernet();
-      await new Promise(r => setTimeout(r,1000))
-       await network.addIP("eth0", "192.168.100.1/24").catch(()=>{});
-       if(CAMERA_CONFIGURATION.camera_network.GATE_WAY != "192.168.100.1" ){
-        await network.addIP("eth0",`${CAMERA_CONFIGURATION.camera_network.GATE_WAY}/24`); }
+      // await new Promise(r => setTimeout(r,1000))
+      //  await network.addIP("eth0", "192.168.100.1/24").catch(()=>{});
+      //  if(CAMERA_CONFIGURATION.camera_network.GATE_WAY != "192.168.100.1" ){
+      //   await network.addIP("eth0",`${CAMERA_CONFIGURATION.camera_network.GATE_WAY}/24`); }
        
    try{
 
     
    if (CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.CONNECT_SYSTEM_NETWORK === 'ETHERNET' ||  CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.CONNECT_SYSTEM_NETWORK === 'ETHERNET & WIFI'){
-    
+       
       if (CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.SYSTEM_NETWORK_ETHERNET_MODE === 'STATIC'
            && CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.STATIC_IP_ADDRESS_ETHERNET.length > 3
            && CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.GATE_WAY.length > 3 
-
        ){
+
+        
         console.log("STATIC SYSTEM_NETWORK_WIFI_MODE ........................",CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.STATIC_IP_ADDRESS_ETHERNET);
-        await new Promise(r => setTimeout(r,1000))
-        await setStaticIP("eth0",CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.STATIC_IP_ADDRESS_ETHERNET,CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.GATE_WAY);
+         await new Promise(r => setTimeout(r,1000))
+         await setStaticIP("eth0",CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.STATIC_IP_ADDRESS_ETHERNET,CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.GATE_WAY);
             
        
-      }else{ 
+      }else{
+        
+          await new Promise(r => setTimeout(r,1000))
             //await setDynamicIP("eth0");
            // dynamic up ehternet port 
-           // await runCommand("sudo ip addr flush dev eth0");
+           // await runCommand(`sudo ip addr flush dev ${iface}`);
+           //
            await setStaticIP("eth0",CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.STATIC_IP_ADDRESS_ETHERNET,CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.GATE_WAY);
           
           }      
@@ -702,10 +760,10 @@ async function SYSTEM_NETWORK_SETTING(){
                       CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.ETHERNET_MAC_Address = await getMACAddress("eth0");
                       console.log("ethernet CONNECTED DEVICE MAC_Address :", CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.ETHERNET_MAC_Address  );
                       await new Promise(r => setTimeout(r,1000))
-                     DYNAMIC_IP_ADDRESS =  await getCurrentIPAddress();
-                     CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.DYNAMIC_IP_ADDRESS_ETHERNET = DYNAMIC_IP_ADDRESS.ethernet;
-                     console.log("SYSTEM ethernet ip :",  CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.DYNAMIC_IP_ADDRESS_ETHERNET );
-                     DYNAMIC_IP_ADDRESS  = "" ;
+                      DYNAMIC_IP_ADDRESS =  await getCurrentIPAddress();
+                      CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.DYNAMIC_IP_ADDRESS_ETHERNET = DYNAMIC_IP_ADDRESS.ethernet;
+                      console.log("SYSTEM ethernet ip :",  CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.DYNAMIC_IP_ADDRESS_ETHERNET );
+                      DYNAMIC_IP_ADDRESS  = "" ;
    
                     }
 
@@ -716,19 +774,13 @@ async function SYSTEM_NETWORK_SETTING(){
 
       if(wifi.CONNECT_SYSTEM_NETWORK === "WIFI" ||wifi.CONNECT_SYSTEM_NETWORK === "ETHERNET & WIFI") {
 
-       if (ssid && password && ssid.length > 3 && password.length > 3) {
+        if (ssid && password && ssid.length > 3 && password.length > 3) {
                
-        const status = await wifiStatus();
-              
-        if (status.connected && status.ssid !== ssid) {
-
-                 await new Promise(r => setTimeout(r,1000))
+         const status = await wifiStatus();
+         if (status.connected && status.ssid !== ssid) {
                   console.log("Disconnecting previous WiFi");
-                  if(await interfaceExists("wlan0")){
-                     await runCommand("sudo ip addr flush dev wlan0");
-                  }
                   await disconnectWifi();
-              }
+               }
 
              console.log("CONNECTING WIFI............");
              await new Promise(r => setTimeout(r,500))
@@ -739,7 +791,11 @@ async function SYSTEM_NETWORK_SETTING(){
                 && CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.STATIC_IP_ADDRESS_WIFI.length > 3
                 && CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.GATE_WAY.length > 3 
                ){
+  
+                   await runCommand(`sudo dhclient -r wlan0`);
+                   await new Promise(r => setTimeout(r,1000))
                    await runCommand("sudo ip addr flush dev wlan0");
+                   await new Promise(r => setTimeout(r,2000))
                    console.log("Static wifi_STATIC_IP_ADDRESS :",CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.STATIC_IP_ADDRESS_WIFI  );
                    console.log("Static wifi_GATE_WAY IP_ADDRESS:",CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.GATE_WAY );
                    await setStaticIP("wlan0",CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.STATIC_IP_ADDRESS_WIFI,CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.GATE_WAY);
@@ -751,10 +807,12 @@ async function SYSTEM_NETWORK_SETTING(){
                    //  await setDynamicIP("wlan0");
                     // await new Promise(r => setTimeout(r,2000));
     
-                }
+                }  
+                     
+                     await new Promise(r => setTimeout(r,2000));
                      
                      wifi.WIFI_MAC_Address = await getMACAddress("wlan0");
-                    console.log("WIFI MAC:", wifi.WIFI_MAC_Address);
+                     console.log("WIFI MAC:", wifi.WIFI_MAC_Address);
 
                     const ip = await getCurrentIPAddress();
                     wifi.DYNAMIC_IP_ADDRESS_WIFI = ip.wifi || "UNKNOWN";
@@ -770,6 +828,7 @@ async function SYSTEM_NETWORK_SETTING(){
                  
            
                     }else{
+
                         CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.WIFI_MAC_Address = "ERROR"
                         CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.DYNAMIC_IP_ADDRESS_WIFI ="ERROR"
                       
@@ -781,17 +840,17 @@ async function SYSTEM_NETWORK_SETTING(){
 
                CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.WIFI_MAC_Address = "N/A"
               CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.DYNAMIC_IP_ADDRESS_WIFI = "N/A"
-               const status = await wifiStatus();
+               
+              const status = await wifiStatus();
                if (status.connected){
-               console.log('disconnect Wifi WiFi Already connected');
-               await disconnectWifi();
-              }
+                  console.log('disconnect Wifi WiFi Already connected');
+                  await disconnectWifi();
+                }
   
             
                }  
 
-        console.log("SYSTEM MAGAMENT IP_ADDRESS:" );
-      //  network.addIP("eth0", "192.168.100.1/24");   // important sysytem defaulf managment ip 
+        console.log("SYSTEM MAGAMENT IP_ADDRESS:" );  
        network.addIP("eth0", "192.168.100.1/24").catch(()=>{});
        if(CAMERA_CONFIGURATION.camera_network.GATE_WAY != "192.168.100.1" ){
        network.addIP("eth0",`${CAMERA_CONFIGURATION.camera_network.GATE_WAY}/24`); }
@@ -1299,10 +1358,10 @@ app.post("/api/camera/config", (req, res) => {
         || body.SBC_SYSTEM_NETWORK.SYSTEM_NETWORK_ETHERNET_MODE  !=  CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.SYSTEM_NETWORK_ETHERNET_MODE
         || body.SBC_SYSTEM_NETWORK.SYSTEM_NETWORK_WIFI_MODE  !=  CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.SYSTEM_NETWORK_WIFI_MODE
 
-        || body.SBC_SYSTEM_NETWORK.WIFI_SSID !=          CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.WIFI_SSID 
-        || body.SBC_SYSTEM_NETWORK.WIFI_PASSWORD  !=  CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.WIFI_PASSWORD 
-        || body.SBC_SYSTEM_NETWORK.WIFI_PASSWORD  !=  CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.WIFI_PASSWORD 
-        || body.SBC_SYSTEM_NETWORK.CONNECT_SYSTEM_NETWORK  !=CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.CONNECT_SYSTEM_NETWORK
+        || body.SBC_SYSTEM_NETWORK.WIFI_SSID      !=          CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.WIFI_SSID 
+        || body.SBC_SYSTEM_NETWORK.WIFI_PASSWORD  !=          CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.WIFI_PASSWORD 
+        || body.SBC_SYSTEM_NETWORK.WIFI_PASSWORD  !=          CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.WIFI_PASSWORD 
+        || body.SBC_SYSTEM_NETWORK.CONNECT_SYSTEM_NETWORK  != CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK.CONNECT_SYSTEM_NETWORK
         
         ) {
             updateObject(CAMERA_CONFIGURATION.SBC_SYSTEM_NETWORK,body.SBC_SYSTEM_NETWORK,CAMERA_ALLOWED.SYSTEM_NETWORK);
@@ -5030,13 +5089,61 @@ server.on("error", err => {
   }
 });
 
+async function waitForNetwork() {
+
+
+  while (true) {
+
+    let { stdout } = await execPromise("ls /sys/class/net");
+
+    console.log("Interfaces:", stdout);
+
+    if (stdout.includes("eth0") || stdout.includes("wlan0")) {
+      console.log("✅ Network interfaces ready");
+      break;
+    }
+
+    console.log("Waiting for interfaces...");
+    await new Promise(r => setTimeout(r, 2000));
+  }
+
+}
+
+// async function waitForNetwork() {
+//   while (true) {
+//     try {
+      
+//          let output = await execPromise("nmcli device status");
+//             console.log("Network ",output);
+//       if (output.includes("eth0") || output.includes("wlan0")) {
+//         console.log("Network interface detected");
+//         break;
+//       }
+
+//     } catch (err) {
+//       console.log("Waiting for network...");
+//     }
+
+//     await new Promise(r => setTimeout(r, 2000));
+//   }
+// }
 
 ensureHostname();
+
 server.listen(PORT, async() => {
+
+
  console.log(`Camera server running on http://0.0.0.0:${PORT}`);
  loadCameraConfig();
- detectSdCardAsync();  
- await SYSTEM_NETWORK_SETTING();
+ detectSdCardAsync(); 
+
+// await setTimeout(async() => {
+//    await SYSTEM_NETWORK_SETTING();
+//  }, 5000);
+
+await waitForNetwork();
+await SYSTEM_NETWORK_INIT();
+await SYSTEM_NETWORK_SETTING();
 
  startMDNS();
  monitorMDNS();
@@ -5044,9 +5151,9 @@ server.listen(PORT, async() => {
 
   setInterval(() =>{
 
-    if(!RECORDING_STATE.active && ffmpegStopping == false && STOPING_RUNNING_FLAG == false  && CAMERA_CONFIGURATION.PTZ_STATE.moving  == false ){
+       if(!RECORDING_STATE.active && ffmpegStopping == false && STOPING_RUNNING_FLAG == false  && CAMERA_CONFIGURATION.PTZ_STATE.moving  == false ){
         CHECK_CAMERA_ONLINE();
-    }
+       }
     
   }, 5000);
   
